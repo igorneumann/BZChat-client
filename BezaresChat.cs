@@ -477,7 +477,7 @@ namespace BezaresChat
         Label lWarn = new Label { Dock = DockStyle.Bottom, Height = 0, BackColor = Color.FromArgb(255, 244, 229), ForeColor = Color.FromArgb(181, 71, 8), Padding = new Padding(8, 4, 8, 4), AutoSize = false };
         TextBox input = new TextBox { Multiline = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), ScrollBars = ScrollBars.Vertical };
         Button bSend = new Button { Text = "Enviar", Dock = DockStyle.Right, Width = 100, BackColor = U.Brand, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-        Button bAttach = new Button { Text = "📎 Imagen / vídeo / audio", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat };
+        Button bAttach = new Button { Text = "📎 Adjuntar archivo", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat };
         Panel chatPanel = new Panel { Dock = DockStyle.Fill, Visible = false };
         Label empty = new Label { Text = "Selecciona un chat de la lista", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gray };
         Label status = new Label { Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.DimGray, Padding = new Padding(8, 4, 0, 0) };
@@ -522,6 +522,18 @@ namespace BezaresChat
 
             chatPanel.Controls.Add(flow); chatPanel.Controls.Add(lWarn); chatPanel.Controls.Add(compose); chatPanel.Controls.Add(head);
             flow.Resize += (s, e) => RelayoutRows();
+
+            // Arrastrar y soltar archivos (documentos, fotos…) sobre la conversación para enviarlos.
+            foreach (Control target in new Control[] { flow, input })
+            {
+                target.AllowDrop = true;
+                target.DragEnter += (s, e) => { e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) && activeId != 0 ? DragDropEffects.Copy : DragDropEffects.None; };
+                target.DragDrop += async (s, e) =>
+                {
+                    var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                    if (files != null) foreach (var f in files) await UploadPath(activeId, f);
+                };
+            }
 
             Controls.Add(chatPanel); Controls.Add(empty); Controls.Add(left); Controls.Add(status);
 
@@ -971,7 +983,7 @@ namespace BezaresChat
                     }
                     else
                     {
-                        string label = type == "audio" ? "▶  Escuchar audio" : type == "video" ? "▶  Ver vídeo" : "📎  " + (U.S(m, "media_name") != "" ? U.S(m, "media_name") : "Abrir archivo");
+                        string label = type == "audio" ? "▶  Escuchar audio" : type == "video" ? "▶  Ver vídeo" : "📄  " + (U.S(m, "media_name") != "" ? U.S(m, "media_name") : "Abrir documento");
                         var link = new LinkLabel { Text = label, AutoSize = true, Font = U.Bold, Margin = new Padding(0, 3, 0, 3), UseMnemonic = false };
                         link.LinkClicked += (s, e) => U.OpenUrl(url);
                         b.Controls.Add(link);
@@ -1033,26 +1045,47 @@ namespace BezaresChat
         {
             long id = activeId;
             if (id == 0) return;
+            const string media = "*.jpg;*.jpeg;*.png;*.gif;*.webp;*.mp4;*.3gp;*.mov;*.mp3;*.ogg;*.m4a;*.aac;*.wav;*.opus";
+            const string docs = "*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.ppt;*.pptx;*.odt;*.ods;*.odp;*.rtf;*.txt;*.csv";
             using (var dlg = new OpenFileDialog
             {
-                Title = "Enviar imagen, vídeo o audio",
-                Filter = "Imágenes, vídeo y audio|*.jpg;*.jpeg;*.png;*.gif;*.webp;*.mp4;*.3gp;*.mov;*.mp3;*.ogg;*.m4a;*.aac;*.wav;*.opus|Documentos|*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.txt"
+                Title = "Enviar archivo",
+                Filter = "Todos los admitidos|" + media + ";" + docs
+                       + "|Documentos (PDF, Word, Excel, PowerPoint…)|" + docs
+                       + "|Imágenes, vídeo y audio|" + media
             })
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                var fi = new FileInfo(dlg.FileName);
-                if (fi.Length > 16 * 1024 * 1024) { MessageBox.Show(this, "El archivo supera 16 MB.", "Bezares Chat"); return; }
-                string text = input.Text.Trim(), file = dlg.FileName;
-                bAttach.Enabled = false; bAttach.Text = "Enviando…";
-                try
-                {
-                    var r = await Task.Run(() => api.Upload("/conversations/" + id + "/messages", file, text));
-                    input.Clear();
-                    AfterSend(r);
-                }
-                catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat"); }
-                finally { bAttach.Enabled = true; bAttach.Text = "📎 Imagen / vídeo / audio"; }
+                await UploadPath(id, dlg.FileName);
             }
+        }
+
+        static readonly HashSet<string> AllowedExt = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            ".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".3gp", ".mov", ".mp3", ".ogg", ".m4a", ".aac", ".wav", ".opus",
+            ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".txt", ".csv" };
+
+        async Task UploadPath(long id, string file)
+        {
+            if (id == 0 || !bAttach.Enabled) return;
+            if (!AllowedExt.Contains(Path.GetExtension(file)))
+            {
+                MessageBox.Show(this, "Tipo de archivo no admitido.\nSe pueden enviar imágenes, audio, vídeo y documentos (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV).", "Bezares Chat");
+                return;
+            }
+            var fi = new FileInfo(file);
+            // El límite real lo decide el servidor (configurable); aquí solo se evita cargar archivos enormes.
+            if (fi.Length > 100L * 1024 * 1024) { MessageBox.Show(this, "El archivo supera 100 MB.", "Bezares Chat"); return; }
+            string text = input.Text.Trim();
+            bAttach.Enabled = false; bAttach.Text = "Enviando…";
+            try
+            {
+                var r = await Task.Run(() => api.Upload("/conversations/" + id + "/messages", file, text));
+                input.Clear();
+                AfterSend(r);
+            }
+            catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat"); }
+            catch (IOException ex) { MessageBox.Show(this, "No se pudo leer el archivo: " + ex.Message, "Bezares Chat"); }
+            finally { bAttach.Enabled = true; bAttach.Text = "📎 Adjuntar archivo"; }
         }
 
         async void Transfer()

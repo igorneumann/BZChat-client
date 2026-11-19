@@ -1,6 +1,6 @@
 # Bezares Chat: cliente de Windows
 
-Programa **portable** (un único `BezaresChat.exe` de unos 65 KB, sin instalación) con el que la recepcionista y los comerciales contestan los chats de la web, WhatsApp y Facebook de [Bezares Chat](https://github.com/igorneumann/Bezares-chat).
+Programa **portable** (un único `BezaresChat.exe` de unos 70 KB, sin instalación) con el que la recepcionista y los comerciales contestan los chats de la web, WhatsApp y Facebook de [Bezares Chat](https://github.com/igorneumann/Bezares-chat).
 
 ## Uso
 
@@ -8,7 +8,7 @@ Programa **portable** (un único `BezaresChat.exe` de unos 65 KB, sin instalaci�
 2. Introduce el servidor (`https://chat.bezares.com`), tu correo y tu contraseña. El administrador crea los usuarios en `https://chat.bezares.com/admin`.
 3. Funciones:
    - **Contestar chats**: escribe y pulsa *Intro* (Mayús+Intro para una línea nueva).
-   - **📎 Imagen / vídeo / audio**: adjunta un archivo de hasta 16 MB.
+   - **📎 Adjuntar archivo**: imágenes, audio, vídeo y documentos (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV). También se pueden **arrastrar** sobre la conversación. El tamaño máximo lo fija el administrador (16 MB por defecto).
    - **↪ Transferir**: solo para recepción. Pasa el chat a un comercial con una nota opcional.
 4. **Aviso de llamada muy visible** cuando entra un chat:
    - **timbre de teléfono** en bucle hasta que alguien lo atiende;
