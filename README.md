@@ -1,4 +1,4 @@
-# Bezares Chat: cliente de Windows
+﻿# Bezares Chat: cliente de Windows
 
 Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalación) con el que la recepcionista y los comerciales contestan los chats de la web, WhatsApp y Facebook de [Bezares Chat](https://github.com/igorneumann/Bezares-chat).
 
@@ -40,7 +40,7 @@ Windows 10 u 11 (incluyen .NET Framework 4.8). No necesita instalar nada.
 
 ## Compilar
 
-Doble clic en `build.bat`. Usa el compilador de C# que ya trae Windows y genera `BezaresChat.exe` en unos segundos.
+Doble clic en `build.bat`. Usa el compilador de C# que ya trae Windows y genera directamente `release\BezaresChat.exe` en unos segundos (cierra antes el programa si lo tienes abierto desde `release\`).
 
 ## Seguridad
 
