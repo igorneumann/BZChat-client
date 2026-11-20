@@ -680,9 +680,11 @@ namespace BezaresChat
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(380, 440);
             Icon = U.MakeIcon(false);
-            var p = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(24, 16, 24, 16), WrapContents = false };
+            // La ventana se ajusta a su contenido: así nada queda cortado con el escalado de pantalla de Windows.
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            var p = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.TopDown, Padding = new Padding(24, 16, 24, 16), WrapContents = false, Location = new Point(0, 0) };
             var brand = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 12) };
             brand.Controls.Add(new PictureBox { Image = BrandIcon.Render(44, BrandIcon.Red), Size = new Size(44, 44), Margin = new Padding(0, 0, 10, 0) });
             brand.Controls.Add(new Label { Text = "Bezares Chat", Font = U.Title, ForeColor = Color.FromArgb(27, 34, 48), AutoSize = true, Margin = new Padding(0, 10, 0, 0) });
@@ -693,9 +695,17 @@ namespace BezaresChat
                 x.Item2.Width = 330;
                 p.Controls.Add(x.Item2);
             }
-            CShow.Margin = new Padding(0, 4, 0, 6);
+            CShow.Margin = new Padding(0, 4, 0, 2);
             CShow.CheckedChanged += (s, e) => TPass.UseSystemPasswordChar = !CShow.Checked;
             p.Controls.Add(CShow);
+            // Enlace de recuperación justo debajo de la contraseña.
+            LForgot.Margin = new Padding(0, 2, 0, 10);
+            LForgot.LinkClicked += (s, e) =>
+            {
+                try { U.OpenUrl(Api.Normalize(TServer.Text) + "/admin/forgot"); }
+                catch (ApiException ex) { LErr.Text = ex.Message; }
+            };
+            p.Controls.Add(LForgot);
             CRemember.Checked = cfg.Remember;
             CStartup.Checked = Config.StartupEnabled;
             p.Controls.Add(CRemember);
@@ -705,14 +715,6 @@ namespace BezaresChat
             BOk.FlatAppearance.BorderSize = 0;
             p.Controls.Add(LErr);
             p.Controls.Add(BOk);
-            LForgot.Margin = new Padding(0, 10, 0, 0);
-            // Abre la página de recuperación del servidor indicado en el navegador.
-            LForgot.LinkClicked += (s, e) =>
-            {
-                try { U.OpenUrl(Api.Normalize(TServer.Text) + "/admin/forgot"); }
-                catch (ApiException ex) { LErr.Text = ex.Message; }
-            };
-            p.Controls.Add(LForgot);
             Controls.Add(p);
             AcceptButton = BOk;
             TServer.Text = cfg.Server;
