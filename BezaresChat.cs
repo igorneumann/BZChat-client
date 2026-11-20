@@ -114,6 +114,93 @@ namespace BezaresChat
         }
     }
 
+    /* =============================================================== banderas de país */
+
+    /// <summary>
+    /// Banderas pequeñas (40 px) de flagcdn.com, cacheadas en la carpeta "flags" junto al .exe.
+    /// Solo se envía el código de país (p. ej. "es"); si no hay conexión se muestra el código en una etiqueta.
+    /// </summary>
+    static class Flags
+    {
+        static readonly Dictionary<string, Image> cache = new Dictionary<string, Image>();
+        static readonly HashSet<string> pending = new HashSet<string>(), failed = new HashSet<string>();
+        public static event Action Loaded;
+        static string Dir { get { return Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "flags"); } }
+
+        public static string Name(string cc)
+        {
+            try { return new System.Globalization.RegionInfo(cc).DisplayName; } catch { return cc; }
+        }
+
+        static Image FromBytes(byte[] b)
+        {
+            // Solo PNG (firma \x89PNG) y de tamaño razonable.
+            if (b == null || b.Length < 8 || b.Length > 64 * 1024 || b[0] != 0x89 || b[1] != 0x50 || b[2] != 0x4E || b[3] != 0x47) return null;
+            using (var ms = new MemoryStream(b)) using (var img = Image.FromStream(ms)) return new Bitmap(img);
+        }
+
+        /** Devuelve la bandera si ya está disponible; si no, la descarga en segundo plano y avisa con Loaded. */
+        public static Image Get(string cc)
+        {
+            cc = (cc ?? "").ToLowerInvariant();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(cc, "^[a-z]{2}$")) return null;
+            Image img;
+            if (cache.TryGetValue(cc, out img)) return img;
+            if (failed.Contains(cc) || pending.Contains(cc)) return null;
+            string file = Path.Combine(Dir, cc + ".png");
+            try { if (File.Exists(file)) { img = FromBytes(File.ReadAllBytes(file)); if (img != null) { cache[cc] = img; return img; } } } catch { }
+            pending.Add(cc);
+            var ui = SynchronizationContext.Current;
+            Task.Run(() =>
+            {
+                byte[] data = null;
+                try
+                {
+                    var r = (HttpWebRequest)WebRequest.Create("https://flagcdn.com/w40/" + cc + ".png");
+                    r.Timeout = 10000; r.UserAgent = "BezaresChat-Windows/1.0"; r.AllowAutoRedirect = false;
+                    using (var res = (HttpWebResponse)r.GetResponse()) using (var s = res.GetResponseStream()) using (var ms = new MemoryStream())
+                    {
+                        var buf = new byte[8192]; int n;
+                        while ((n = s.Read(buf, 0, buf.Length)) > 0 && ms.Length < 65536) ms.Write(buf, 0, n);
+                        data = ms.ToArray();
+                    }
+                }
+                catch { }
+                Action done = () =>
+                {
+                    pending.Remove(cc);
+                    Image got = null;
+                    try { got = FromBytes(data); } catch { }
+                    if (got == null) { failed.Add(cc); return; }
+                    cache[cc] = got;
+                    try { Directory.CreateDirectory(Dir); File.WriteAllBytes(file, data); } catch { }
+                    var h = Loaded; if (h != null) h();
+                };
+                if (ui != null) ui.Post(_ => done(), null); else done();
+            });
+            return null;
+        }
+
+        /** Dibuja la bandera (o el código del país si aún no está) y devuelve el ancho ocupado. */
+        public static int Draw(Graphics g, string cc, int x, int y, int h)
+        {
+            if (string.IsNullOrEmpty(cc)) return 0;
+            int w = (int)Math.Round(h * 4 / 3.0);
+            var img = Get(cc);
+            if (img != null)
+            {
+                g.DrawImage(img, new Rectangle(x, y, w, h));
+                using (var p = new Pen(Color.FromArgb(60, 0, 0, 0))) g.DrawRectangle(p, x, y, w - 1, h - 1);
+            }
+            else
+            {
+                using (var b = new SolidBrush(Color.FromArgb(232, 235, 240))) g.FillRectangle(b, x, y, w, h);
+                TextRenderer.DrawText(g, cc.ToUpperInvariant(), U.Small, new Rectangle(x, y, w, h), Color.DimGray, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
+            return w + 6;
+        }
+    }
+
     /* =============================================================== icono de marca (anagrama BZ) */
 
     /// <summary>
@@ -651,6 +738,8 @@ namespace BezaresChat
         // controles
         ListBox list = new ListBox { Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 58, BorderStyle = BorderStyle.None, IntegralHeight = false };
         Label lTitle = new Label { Font = U.Title, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+        PictureBox picFlag = new PictureBox { Dock = DockStyle.Left, Width = 0, SizeMode = PictureBoxSizeMode.CenterImage, Margin = new Padding(0) };
+        ToolTip tips = new ToolTip();
         Label lSub = new Label { Font = U.Small, ForeColor = Color.DimGray, AutoSize = false, Dock = DockStyle.Bottom, Height = 18 };
         Button bTransfer = new Button { Text = "↪ Transferir", Width = 120, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
         FlowLayoutPanel flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, BackColor = Color.FromArgb(244, 246, 249), Padding = new Padding(8) };
@@ -689,7 +778,8 @@ namespace BezaresChat
 
             // Cabecera del chat
             var head = new Panel { Dock = DockStyle.Top, Height = 58, Padding = new Padding(12, 6, 12, 6), BackColor = Color.White };
-            head.Controls.Add(lTitle); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            Flags.Loaded += () => { list.Invalidate(); if (activeId != 0) RenderHead(); };
             bTransfer.Click += (s, e) => Transfer();
 
             // Redacción
@@ -1035,7 +1125,8 @@ namespace BezaresChat
             g.FillEllipse(new SolidBrush(dot), e.Bounds.Left + 10, e.Bounds.Top + 12, 10, 10);
             int x = e.Bounds.Left + 28, w = e.Bounds.Width - 28 - 60;
             bool closed = U.S(c, "status") == "closed";
-            TextRenderer.DrawText(g, (ring ? "📞 " : "") + ConvName(c), U.Bold, new Rectangle(x, e.Bounds.Top + 6, w, 20), closed ? Color.Gray : Color.Black, TextFormatFlags.EndEllipsis);
+            int fw = Flags.Draw(g, U.S(c, "country"), x, e.Bounds.Top + 9, 14); // bandera del país de origen
+            TextRenderer.DrawText(g, (ring ? "📞 " : "") + ConvName(c), U.Bold, new Rectangle(x + fw, e.Bounds.Top + 6, w - fw, 20), closed ? Color.Gray : Color.Black, TextFormatFlags.EndEllipsis);
             TextRenderer.DrawText(g, U.Time(U.L(c, "updated_at")), U.Small, new Rectangle(e.Bounds.Right - 64, e.Bounds.Top + 8, 58, 16), Color.Gray, TextFormatFlags.Right);
             TextRenderer.DrawText(g, U.S(c, "last_preview"), U.Small, new Rectangle(x, e.Bounds.Top + 26, w, 16), Color.DimGray, TextFormatFlags.EndEllipsis);
             long asg = U.L(c, "assigned_to");
@@ -1082,7 +1173,19 @@ namespace BezaresChat
         {
             J c; if (!convs.TryGetValue(activeId, out c)) return;
             lTitle.Text = ConvName(c);
+            // Bandera del país de origen delante del nombre
+            string cc = U.S(c, "country");
+            if (cc != "")
+            {
+                var bmp = new Bitmap(34, 22);
+                using (var g = Graphics.FromImage(bmp)) { g.SmoothingMode = SmoothingMode.AntiAlias; Flags.Draw(g, cc, 0, 2, 18); }
+                var old = picFlag.Image; picFlag.Image = bmp; if (old != null) old.Dispose();
+                picFlag.Width = 34;
+                tips.SetToolTip(picFlag, Flags.Name(cc));
+            }
+            else { picFlag.Width = 0; }
             var parts = new List<string> { U.Channel(U.S(c, "channel")) };
+            if (cc != "") parts.Add(Flags.Name(cc));
             if (U.S(c, "email") != "") parts.Add(U.S(c, "email"));
             if (U.S(c, "phone") != "") parts.Add(U.S(c, "phone"));
             string lang = U.S(c, "lang");
