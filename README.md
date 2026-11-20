@@ -25,7 +25,7 @@ Los mensajes en otros idiomas aparecen **traducidos al español** con el origina
 
 ## Datos que guarda
 
-Junto al `.exe` crea `BezaresChat.ini` con el servidor, el correo y el token de sesión **cifrado con DPAPI** (solo lo puede leer tu usuario de Windows). No guarda la contraseña. «Iniciar con Windows» añade una entrada en el registro del usuario actual (`HKCUSoftwareMicrosoftWindowsCurrentVersionRun`), sin necesitar permisos de administrador. Si mueves el `.exe`, la ruta se actualiza al abrirlo. Si algo falla, escribe los detalles en `BezaresChat-errores.log`.
+Junto al `.exe` crea `BezaresChat.ini` con el servidor, el correo y el token de sesión **cifrado con DPAPI** (solo lo puede leer tu usuario de Windows). No guarda la contraseña. «Iniciar con Windows» añade una entrada en el registro del usuario actual (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`), sin necesitar permisos de administrador. Si mueves el `.exe`, la ruta se actualiza al abrirlo. Si algo falla, escribe los detalles en `BezaresChat-errores.log`.
 
 ## Requisitos
 
