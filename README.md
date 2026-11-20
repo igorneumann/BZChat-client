@@ -14,6 +14,9 @@ Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalaci�
    - **Contestar chats**: escribe y pulsa *Intro* (Mayús+Intro para una línea nueva).
    - **📎 Adjuntar archivo**: imágenes, audio, vídeo y documentos (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV). También se pueden **arrastrar** sobre la conversación. El tamaño máximo lo fija el administrador (16 MB por defecto).
    - **↪ Transferir**: solo para recepción. Pasa el chat a un comercial con una nota opcional.
+   - **📋 Copiar**: debajo de cada mensaje, copia su texto (o el enlace del adjunto) al portapapeles.
+   - **✉ Correo**: envía la transcripción completa de la conversación por correo electrónico. Por defecto, al correo del cliente; se puede cambiar antes de enviar.
+   - **📝 Plantillas** (solo recepción): menú con respuestas preparadas que se insertan en el cuadro de texto. Desde «Gestionar plantillas…» se crean, editan y borran; se comparten entre todas las recepcionistas. Variables: `{nombre}` (cliente) y `{agente}` (tu nombre).
 4. **Aviso de llamada muy visible** cuando entra un chat:
    - **timbre de teléfono** en bucle hasta que alguien lo atiende;
    - ventana roja y naranja **parpadeando, siempre encima**, con el botón **📞 ATENDER**;

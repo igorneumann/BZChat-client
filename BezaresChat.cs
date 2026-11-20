@@ -470,6 +470,8 @@ namespace BezaresChat
 
         public J Get(string path) { return Read(Req("GET", path)); }
 
+        public J Delete(string path) { return Read(Req("DELETE", path)); }
+
         public J Post(string path, object body)
         {
             var r = Req("POST", path);
@@ -684,6 +686,135 @@ namespace BezaresChat
 
     /* =============================================================== transferir */
 
+    /* =============================================================== enviar por correo */
+
+    class EmailForm : Form
+    {
+        public TextBox To = new TextBox { Width = 340 };
+
+        public EmailForm(string defaultTo, string customer)
+        {
+            Text = "Enviar la conversación por correo";
+            Font = U.Base;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(380, 200);
+            var p = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(18), WrapContents = false };
+            p.Controls.Add(new Label { Text = "Se enviará la transcripción completa de la conversación" + (customer != "" ? " con " + customer : "") + ",\ncon enlaces a los adjuntos (válidos 7 días).", AutoSize = true, MaximumSize = new Size(340, 0), ForeColor = Color.DimGray });
+            p.Controls.Add(new Label { Text = "Enviar a:", AutoSize = true, Margin = new Padding(0, 12, 0, 2) });
+            To.Text = defaultTo;
+            p.Controls.Add(To);
+            var ok = new Button { Text = "✉ Enviar", DialogResult = DialogResult.OK, Width = 120, Height = 32, Margin = new Padding(0, 12, 0, 0) };
+            p.Controls.Add(ok);
+            AcceptButton = ok;
+            Controls.Add(p);
+            Shown += (s, e) => { To.Focus(); To.SelectAll(); };
+        }
+    }
+
+    /* =============================================================== plantillas (recepción) */
+
+    class TemplatesForm : Form
+    {
+        readonly Api api;
+        public List<J> Items;
+        ListBox list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+        TextBox title = new TextBox { Width = 380 };
+        TextBox body = new TextBox { Multiline = true, Width = 380, Height = 170, ScrollBars = ScrollBars.Vertical };
+        long editingId;
+
+        public TemplatesForm(Api api, List<J> items)
+        {
+            this.api = api;
+            Items = items;
+            Text = "Plantillas de respuesta";
+            Font = U.Base;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = false;
+            ClientSize = new Size(680, 400);
+            MinimumSize = new Size(640, 380);
+
+            var left = new Panel { Dock = DockStyle.Left, Width = 230, Padding = new Padding(12, 12, 6, 12) };
+            var bNew = new Button { Text = "➕ Nueva plantilla", Dock = DockStyle.Bottom, Height = 32 };
+            left.Controls.Add(list); left.Controls.Add(bNew);
+
+            var right = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(10, 12, 12, 12) };
+            right.Controls.Add(new Label { Text = "Título (lo que verás en el menú)", AutoSize = true, ForeColor = Color.DimGray });
+            right.Controls.Add(title);
+            right.Controls.Add(new Label { Text = "Texto de la respuesta", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 10, 3, 0) });
+            right.Controls.Add(body);
+            right.Controls.Add(new Label { Text = "Variables: {nombre} = nombre del cliente · {agente} = tu nombre", AutoSize = true, ForeColor = Color.Gray, Font = U.Small });
+            var actions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 10, 0, 0) };
+            var bSave = new Button { Text = "💾 Guardar", Width = 120, Height = 32, BackColor = U.Brand, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+            bSave.FlatAppearance.BorderSize = 0;
+            var bDel = new Button { Text = "🗑 Eliminar", Width = 110, Height = 32 };
+            actions.Controls.Add(bSave); actions.Controls.Add(bDel);
+            right.Controls.Add(actions);
+
+            Controls.Add(right); Controls.Add(left);
+            list.DisplayMember = "Text";
+            list.SelectedIndexChanged += (s, e) => Select();
+            bNew.Click += (s, e) => { list.ClearSelected(); editingId = 0; title.Text = ""; body.Text = ""; title.Focus(); };
+            bSave.Click += async (s, e) => await Save();
+            bDel.Click += async (s, e) => await Delete();
+            Fill(0);
+        }
+
+        class Item { public long Id; public string Text; public override string ToString() { return Text; } }
+
+        void Fill(long selectId)
+        {
+            list.Items.Clear();
+            foreach (var t in Items) list.Items.Add(new Item { Id = U.L(t, "id"), Text = U.S(t, "title") });
+            for (int i = 0; i < list.Items.Count; i++) if (((Item)list.Items[i]).Id == selectId) list.SelectedIndex = i;
+        }
+
+        new void Select()
+        {
+            var it = list.SelectedItem as Item;
+            if (it == null) return;
+            var t = Items.FirstOrDefault(x => U.L(x, "id") == it.Id);
+            if (t == null) return;
+            editingId = it.Id; title.Text = U.S(t, "title"); body.Text = U.S(t, "body");
+        }
+
+        async Task Reload(long selectId)
+        {
+            var r = await Task.Run(() => api.Get("/templates"));
+            Items = U.A(r, "templates");
+            Fill(selectId);
+        }
+
+        async Task Save()
+        {
+            string t = title.Text.Trim(), b = body.Text.Trim();
+            if (t == "" || b == "") { MessageBox.Show(this, "Escribe un título y un texto.", "Plantillas"); return; }
+            try
+            {
+                long id = editingId;
+                var r = await Task.Run(() => api.Post(id != 0 ? "/templates/" + id : "/templates", new J { { "title", t }, { "body", b } }));
+                editingId = U.L(r["template"] as J, "id");
+                await Reload(editingId);
+            }
+            catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Plantillas"); }
+        }
+
+        async Task Delete()
+        {
+            if (editingId == 0) return;
+            if (MessageBox.Show(this, "¿Eliminar la plantilla «" + title.Text + "»?", "Plantillas", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
+            {
+                long id = editingId;
+                await Task.Run(() => api.Delete("/templates/" + id));
+                editingId = 0; title.Text = ""; body.Text = "";
+                await Reload(0);
+            }
+            catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Plantillas"); }
+        }
+    }
+
     class TransferForm : Form
     {
         public ComboBox Agents = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 340 };
@@ -751,6 +882,10 @@ namespace BezaresChat
         TextBox input = new TextBox { Multiline = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), ScrollBars = ScrollBars.Vertical };
         Button bSend = new Button { Text = "Enviar", Dock = DockStyle.Right, Width = 100, BackColor = U.Brand, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
         Button bAttach = new Button { Text = "📎 Adjuntar archivo", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat };
+        Button bTemplates = new Button { Text = "📝 Plantillas ▾", Dock = DockStyle.Left, Width = 150, FlatStyle = FlatStyle.Flat, Visible = false };
+        Button bEmail = new Button { Text = "✉ Correo", Width = 100, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
+        ContextMenuStrip templatesMenu = new ContextMenuStrip();
+        List<J> templates = new List<J>();
         Panel chatPanel = new Panel { Dock = DockStyle.Fill, Visible = false };
         Label empty = new Label { Text = "Selecciona un chat de la lista", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gray };
         Label status = new Label { Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.DimGray, Padding = new Padding(8, 4, 0, 0) };
@@ -782,7 +917,10 @@ namespace BezaresChat
 
             // Cabecera del chat
             var head = new Panel { Dock = DockStyle.Top, Height = 58, Padding = new Padding(12, 6, 12, 6), BackColor = Color.White };
-            head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bEmail); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            tips.SetToolTip(bEmail, "Enviar la conversación por correo electrónico");
+            bEmail.Click += (s, e) => EmailChat();
+            bTemplates.Click += async (s, e) => await ShowTemplatesMenu();
             Flags.Loaded += () => { list.Invalidate(); if (activeId != 0) RenderHead(); };
             bTransfer.Click += (s, e) => Transfer();
 
@@ -790,7 +928,7 @@ namespace BezaresChat
             var compose = new Panel { Dock = DockStyle.Bottom, Height = 96, Padding = new Padding(8), BackColor = Color.White };
             var buttons = new Panel { Dock = DockStyle.Bottom, Height = 34 };
             bSend.FlatAppearance.BorderSize = 0;
-            buttons.Controls.Add(bAttach); buttons.Controls.Add(bSend);
+            buttons.Controls.Add(bTemplates); buttons.Controls.Add(bAttach); buttons.Controls.Add(bSend);
             compose.Controls.Add(input); compose.Controls.Add(buttons);
             bSend.Click += (s, e) => SendText();
             bAttach.Click += (s, e) => SendFile();
@@ -924,6 +1062,8 @@ namespace BezaresChat
             since = 0; firstSync = true; activeId = 0; syncCount = 0;
             Text = "Bezares Chat — " + U.S(me, "name");
             bTransfer.Visible = U.S(me, "role") != "sales"; // solo recepción/admin transfiere
+            bTemplates.Visible = U.S(me, "role") == "receptionist"; // plantillas: solo recepción
+            templates.Clear();
             chatPanel.Visible = false; empty.Visible = true;
             if (startHidden)
             {
@@ -1308,7 +1448,27 @@ namespace BezaresChat
                     if (dir == "out" && tr != "") b.Controls.Add(lbl("🌐 Enviado en " + U.LangName(lang) + ": " + tr, U.Small, Color.Gray));
                 }
                 if (U.S(m, "send_status") == "error") b.Controls.Add(lbl("⚠ No entregado: " + U.S(m, "send_error"), U.Small, Color.FromArgb(198, 40, 40)));
-                b.Controls.Add(lbl(U.Time(U.L(m, "created_at")), U.Small, Color.Gray));
+
+                // Pie: hora + botón para copiar el mensaje al portapapeles
+                string copyText = dir == "in" && tr != "" ? tr + Environment.NewLine + "(" + U.LangName(lang) + ") " + body : body;
+                if (copyText == "" && url != "") copyText = url;
+                var foot = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 0) };
+                foot.Controls.Add(new Label { Text = U.Time(U.L(m, "created_at")), Font = U.Small, ForeColor = Color.Gray, AutoSize = true, Margin = new Padding(0, 1, 8, 0) });
+                if (copyText != "")
+                {
+                    var copy = new LinkLabel { Text = "📋 Copiar", Font = U.Small, AutoSize = true, LinkColor = Color.FromArgb(90, 100, 120), ActiveLinkColor = U.Brand, LinkBehavior = LinkBehavior.HoverUnderline, Margin = new Padding(0, 1, 0, 0), UseMnemonic = false };
+                    tips.SetToolTip(copy, "Copiar este mensaje al portapapeles");
+                    copy.LinkClicked += (s, e) =>
+                    {
+                        try { Clipboard.SetText(copyText); copy.Text = "✓ Copiado"; }
+                        catch { copy.Text = "No se pudo copiar"; }
+                        var t = new System.Windows.Forms.Timer { Interval = 1500 };
+                        t.Tick += (s2, e2) => { t.Stop(); t.Dispose(); if (!copy.IsDisposed) copy.Text = "📋 Copiar"; };
+                        t.Start();
+                    };
+                    foot.Controls.Add(copy);
+                }
+                b.Controls.Add(foot);
             }
             row.Controls.Add(b);
             b.SizeChanged += (s, e) => LayoutRow(row);
@@ -1393,6 +1553,71 @@ namespace BezaresChat
             catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat"); }
             catch (IOException ex) { MessageBox.Show(this, "No se pudo leer el archivo: " + ex.Message, "Bezares Chat"); }
             finally { bAttach.Enabled = true; bAttach.Text = "📎 Adjuntar archivo"; }
+        }
+
+        /* ------------------------------------------------ plantillas */
+
+        async Task ShowTemplatesMenu()
+        {
+            if (templates.Count == 0)
+            {
+                try { templates = U.A(await Task.Run(() => api.Get("/templates")), "templates"); }
+                catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Plantillas"); return; }
+            }
+            templatesMenu.Items.Clear();
+            foreach (var t in templates)
+            {
+                var tpl = t;
+                var item = new ToolStripMenuItem(U.S(tpl, "title")) { ToolTipText = U.S(tpl, "body").Length > 200 ? U.S(tpl, "body").Substring(0, 200) + "…" : U.S(tpl, "body") };
+                item.Click += (s, e) => InsertTemplate(U.S(tpl, "body"));
+                templatesMenu.Items.Add(item);
+            }
+            if (templates.Count == 0) templatesMenu.Items.Add(new ToolStripMenuItem("(sin plantillas todavía)") { Enabled = false });
+            templatesMenu.Items.Add(new ToolStripSeparator());
+            templatesMenu.Items.Add("⚙ Gestionar plantillas…", null, (s, e) => ManageTemplates());
+            templatesMenu.Show(bTemplates, new Point(0, -templatesMenu.PreferredSize.Height));
+        }
+
+        void InsertTemplate(string text)
+        {
+            J c; convs.TryGetValue(activeId, out c);
+            string name = c != null ? U.S(c, "name") : "";
+            text = text.Replace("{nombre}", name).Replace("{name}", name).Replace("{agente}", U.S(me, "name"));
+            int pos = input.SelectionStart;
+            input.SelectedText = text;
+            input.SelectionStart = pos + text.Length;
+            input.Focus();
+        }
+
+        void ManageTemplates()
+        {
+            using (var f = new TemplatesForm(api, templates))
+            {
+                f.ShowDialog(this);
+                templates = f.Items;
+            }
+        }
+
+        /* ------------------------------------------------ enviar por correo */
+
+        async void EmailChat()
+        {
+            long id = activeId;
+            J c; if (id == 0 || !convs.TryGetValue(id, out c)) return;
+            using (var f = new EmailForm(U.S(c, "email"), ConvName(c)))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                string to = f.To.Text.Trim();
+                if (to == "" || !to.Contains("@")) { MessageBox.Show(this, "Escribe un correo electrónico válido.", "Bezares Chat"); return; }
+                bEmail.Enabled = false; bEmail.Text = "Enviando…";
+                try
+                {
+                    await Task.Run(() => api.Post("/conversations/" + id + "/email", new J { { "to", to } }));
+                    tray.ShowBalloonTip(3000, "Correo enviado", "Conversación enviada a " + to, ToolTipIcon.Info);
+                }
+                catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                finally { bEmail.Enabled = true; bEmail.Text = "✉ Correo"; }
+            }
         }
 
         async void Transfer()
