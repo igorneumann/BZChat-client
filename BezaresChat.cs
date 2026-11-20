@@ -934,7 +934,7 @@ namespace BezaresChat
             {
                 long aid = U.L(a, "id");
                 if (U.L(a, "active") == 0 || aid == exclude || aid == myId || !U.B(a, "online")) continue;
-                string role = U.S(a, "role") == "sales" ? "Comercial" : U.S(a, "role") == "receptionist" ? "Recepción" : "Admin";
+                string role = U.S(a, "role_name") != "" ? U.S(a, "role_name") : (U.S(a, "role") == "sales" ? "Comercial" : U.S(a, "role") == "receptionist" ? "Recepción" : "Admin");
                 Agents.Items.Add(new AgentItem { Id = aid, Text = "● " + U.S(a, "name") + " (" + role + ")" });
             }
             if (Agents.Items.Count > 0) Agents.SelectedIndex = 0;
@@ -1026,7 +1026,7 @@ namespace BezaresChat
             left.Controls.Add(list); left.Controls.Add(listHead);
             list.DrawItem += DrawConv;
             // Papelera en cada fila (recepción y administración): borra sin abrir la conversación.
-            list.CanTrash = i => me != null && U.S(me, "role") != "sales";
+            list.CanTrash = i => Can("delete");
             list.TrashClicked += i => { if (i >= 0 && i < list.Items.Count) DeleteChat(((ConvItem)list.Items[i]).Id); };
             list.SelectedIndexChanged += (s, e) => { var c = list.SelectedItem as ConvItem; if (c != null && c.Id != activeId) OpenChat(c.Id); };
 
@@ -1190,9 +1190,7 @@ namespace BezaresChat
             since = 0; firstSync = true; activeId = 0; syncCount = 0;
             offline = false; ApplyOnlineUi();
             Text = "Bezares Chat — " + U.S(me, "name");
-            bTransfer.Visible = U.S(me, "role") != "sales"; // solo recepción/admin transfiere
-            bTemplates.Visible = U.S(me, "role") == "receptionist"; // plantillas: solo recepción
-            bDelete.Visible = U.S(me, "role") != "sales";            // borrar: recepción y administración
+            ApplyPerms();
             templates.Clear();
             chatPanel.Visible = false; empty.Visible = true;
             if (startHidden)
@@ -1217,6 +1215,51 @@ namespace BezaresChat
             try { await Task.Run(() => api.Post("/auth/logout", null)); } catch { }
             cfg.Token = ""; cfg.Save(); api.Token = "";
             ShowLogin(null);
+        }
+
+        /* ------------------------------------------------ permisos del rol */
+
+        /** ¿Tiene mi rol este permiso? (Si el servidor aún no envía permisos, se usa el comportamiento anterior por rol.) */
+        bool Can(string perm)
+        {
+            if (me == null) return false;
+            object v;
+            if (me.TryGetValue("perms", out v) && v is object[])
+                return ((object[])v).Any(x => Convert.ToString(x) == perm);
+            string r = U.S(me, "role");
+            if (perm == "transfer" || perm == "delete") return r != "sales";
+            if (perm == "templates") return r == "receptionist";
+            return true;
+        }
+
+        string permKey = null;
+
+        /** Muestra u oculta los botones según los permisos (se vuelve a aplicar si el administrador los cambia). */
+        void ApplyPerms()
+        {
+            bTransfer.Visible = Can("transfer");
+            bTemplates.Visible = Can("templates");
+            bDelete.Visible = Can("delete");
+            bResolve.Visible = Can("resolve");
+            bEmail.Visible = Can("email");
+            object v;
+            permKey = me != null && me.TryGetValue("perms", out v) && v is object[] ? string.Join(",", ((object[])v).Select(Convert.ToString)) : "";
+            list.Invalidate(); // papelera en la lista
+        }
+
+        /** En cada sincronización, toma mis permisos actuales de la lista de agentes. */
+        void RefreshMyPerms()
+        {
+            if (me == null) return;
+            var mine = agents.FirstOrDefault(a => U.L(a, "id") == U.L(me, "id"));
+            object v;
+            if (mine == null || !mine.TryGetValue("perms", out v) || !(v is object[])) return;
+            string key = string.Join(",", ((object[])v).Select(Convert.ToString));
+            if (key == permKey) return;
+            me["perms"] = v;
+            me["role"] = U.S(mine, "role");
+            if (mine.ContainsKey("role_name")) me["role_name"] = mine["role_name"];
+            ApplyPerms();
         }
 
         /* ------------------------------------------------ conectado / desconectado */
@@ -1286,6 +1329,7 @@ namespace BezaresChat
         {
             since = U.L(d, "now");
             agents = U.A(d, "agents");
+            RefreshMyPerms();
             var incoming = U.A(d, "conversations");
             if (full)
             {
