@@ -884,6 +884,7 @@ namespace BezaresChat
         Button bAttach = new Button { Text = "📎 Adjuntar archivo", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat };
         Button bTemplates = new Button { Text = "📝 Plantillas ▾", Dock = DockStyle.Left, Width = 150, FlatStyle = FlatStyle.Flat, Visible = false };
         Button bEmail = new Button { Text = "✉ Correo", Width = 100, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
+        Button bDelete = new Button { Text = "🗑 Borrar", Width = 95, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(198, 40, 40), Visible = false };
         ContextMenuStrip templatesMenu = new ContextMenuStrip();
         List<J> templates = new List<J>();
         Panel chatPanel = new Panel { Dock = DockStyle.Fill, Visible = false };
@@ -917,7 +918,9 @@ namespace BezaresChat
 
             // Cabecera del chat
             var head = new Panel { Dock = DockStyle.Top, Height = 58, Padding = new Padding(12, 6, 12, 6), BackColor = Color.White };
-            head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bEmail); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bDelete); head.Controls.Add(bEmail); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
+            tips.SetToolTip(bDelete, "Borrar definitivamente esta conversación");
+            bDelete.Click += (s, e) => DeleteChat();
             tips.SetToolTip(bEmail, "Enviar la conversación por correo electrónico");
             bEmail.Click += (s, e) => EmailChat();
             bTemplates.Click += async (s, e) => await ShowTemplatesMenu();
@@ -1063,6 +1066,7 @@ namespace BezaresChat
             Text = "Bezares Chat — " + U.S(me, "name");
             bTransfer.Visible = U.S(me, "role") != "sales"; // solo recepción/admin transfiere
             bTemplates.Visible = U.S(me, "role") == "receptionist"; // plantillas: solo recepción
+            bDelete.Visible = U.S(me, "role") != "sales";            // borrar: recepción y administración
             templates.Clear();
             chatPanel.Visible = false; empty.Visible = true;
             if (startHidden)
@@ -1596,6 +1600,32 @@ namespace BezaresChat
                 f.ShowDialog(this);
                 templates = f.Items;
             }
+        }
+
+        /* ------------------------------------------------ borrar conversación */
+
+        async void DeleteChat()
+        {
+            long id = activeId;
+            J c; if (id == 0 || !convs.TryGetValue(id, out c)) return;
+            var answer = MessageBox.Show(this,
+                "¿Borrar definitivamente la conversación con " + ConvName(c) + "?\n\n" +
+                "Se borrarán todos sus mensajes y archivos adjuntos para todo el equipo. Esta acción no se puede deshacer.\n\n" +
+                "Consejo: si quieres conservar una copia, envíala antes por correo con «✉ Correo».",
+                "Borrar conversación", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.Yes) return;
+            bDelete.Enabled = false;
+            try
+            {
+                await Task.Run(() => api.Delete("/conversations/" + id));
+                convs.Remove(id); msgs.Remove(id); unread.Remove(id); ringing.Remove(id);
+                UpdateRinging();
+                CloseChat();
+                RenderList();
+                tray.ShowBalloonTip(2500, "Conversación borrada", ConvName(c), ToolTipIcon.Info);
+            }
+            catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            finally { bDelete.Enabled = true; }
         }
 
         /* ------------------------------------------------ enviar por correo */

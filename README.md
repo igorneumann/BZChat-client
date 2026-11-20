@@ -16,6 +16,7 @@ Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalaci�
    - **↪ Transferir**: solo para recepción. Pasa el chat a un comercial con una nota opcional.
    - **📋 Copiar**: debajo de cada mensaje, copia su texto (o el enlace del adjunto) al portapapeles.
    - **✉ Correo**: envía la transcripción completa de la conversación por correo electrónico. Por defecto, al correo del cliente; se puede cambiar antes de enviar.
+   - **🗑 Borrar** (recepción y administración): borra definitivamente la conversación, con sus mensajes y adjuntos, para todo el equipo, tras pedir confirmación. Si el visitante web vuelve a escribir, empieza un chat nuevo.
    - **📝 Plantillas** (solo recepción): menú con respuestas preparadas que se insertan en el cuadro de texto. Desde «Gestionar plantillas…» se crean, editan y borran; se comparten entre todas las recepcionistas. Variables: `{nombre}` (cliente) y `{agente}` (tu nombre).
 4. **Aviso de llamada muy visible** cuando entra un chat:
    - **timbre de teléfono** en bucle hasta que alguien lo atiende;
