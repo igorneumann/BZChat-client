@@ -640,10 +640,12 @@ namespace BezaresChat
 
     class RingForm : Form
     {
-        public Label LWho = new Label { Font = new Font("Segoe UI", 15f, FontStyle.Bold), ForeColor = Color.White, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 44 };
-        public Label LMsg = new Label { Font = new Font("Segoe UI", 11f), ForeColor = Color.White, AutoSize = false, TextAlign = ContentAlignment.TopCenter, Dock = DockStyle.Top, Height = 60 };
-        public Button BAnswer = new Button { Text = "📞  ATENDER", Font = new Font("Segoe UI", 14f, FontStyle.Bold), BackColor = Color.FromArgb(26, 127, 55), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Height = 56, Dock = DockStyle.Bottom };
-        public LinkLabel LLater = new LinkLabel { Text = "Posponer 2 minutos", Font = new Font("Segoe UI", 10f), LinkColor = Color.White, ActiveLinkColor = Color.White, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Bottom, Height = 32 };
+        // Aviso compacto (440 x 135): texto a la izquierda y botón ATENDER grande a la derecha.
+        Label LHead = new Label { Text = "🔔  NUEVO CHAT ENTRANTE", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Color.White, AutoSize = false, Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
+        public Label LWho = new Label { Font = new Font("Segoe UI", 12.5f, FontStyle.Bold), ForeColor = Color.White, AutoSize = false, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Top, Height = 28, UseMnemonic = false };
+        public Label LMsg = new Label { Font = new Font("Segoe UI", 9.5f), ForeColor = Color.White, AutoSize = false, AutoEllipsis = true, TextAlign = ContentAlignment.TopLeft, Dock = DockStyle.Fill, UseMnemonic = false };
+        public Button BAnswer = new Button { Text = "📞\nATENDER", Font = new Font("Segoe UI", 13f, FontStyle.Bold), BackColor = Color.FromArgb(26, 127, 55), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Width = 130, Dock = DockStyle.Right };
+        public LinkLabel LLater = new LinkLabel { Text = "Posponer 2 minutos", Font = new Font("Segoe UI", 8.5f), LinkColor = Color.White, ActiveLinkColor = Color.White, AutoSize = false, TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Bottom, Height = 18 };
         System.Windows.Forms.Timer blink = new System.Windows.Forms.Timer { Interval = 450 };
         bool phase;
 
@@ -653,21 +655,23 @@ namespace BezaresChat
             TopMost = true;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
-            Size = new Size(440, 270);
+            Size = new Size(440, 135);
             BackColor = Color.FromArgb(220, 30, 40);
-            Padding = new Padding(14);
-            var head = new Label { Text = "🔔  NUEVO CHAT ENTRANTE", Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Top, Height = 32, TextAlign = ContentAlignment.MiddleCenter };
+            Padding = new Padding(10);
             BAnswer.FlatAppearance.BorderSize = 0;
-            Controls.Add(LMsg); Controls.Add(LWho); Controls.Add(head);
-            Controls.Add(LLater); Controls.Add(BAnswer);
+            var text = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 10, 0), BackColor = Color.Transparent };
+            // Orden de anclaje: el último añadido se coloca primero (cabecera arriba del todo).
+            text.Controls.Add(LMsg); text.Controls.Add(LLater); text.Controls.Add(LWho); text.Controls.Add(LHead);
+            Controls.Add(text); Controls.Add(BAnswer);
             blink.Tick += (s, e) => { phase = !phase; BackColor = phase ? Color.FromArgb(255, 140, 0) : Color.FromArgb(220, 30, 40); };
             VisibleChanged += (s, e) => { if (Visible) blink.Start(); else blink.Stop(); };
         }
 
         public void ShowCall(string who, string msg, int waiting)
         {
+            LHead.Text = "🔔  NUEVO CHAT ENTRANTE" + (waiting > 1 ? "  ·  " + waiting + " esperando" : "");
             LWho.Text = who;
-            LMsg.Text = (msg.Length > 140 ? msg.Substring(0, 140) + "…" : msg) + (waiting > 1 ? "\n(" + waiting + " chats esperando)" : "");
+            LMsg.Text = msg.Length > 90 ? msg.Substring(0, 90) + "…" : msg;
             var wa = Screen.PrimaryScreen.WorkingArea;
             Location = new Point(wa.Right - Width - 20, wa.Bottom - Height - 20);
             if (!Visible) Show();
