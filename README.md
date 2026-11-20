@@ -17,6 +17,7 @@ Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalaci�
    - **📋 Copiar**: debajo de cada mensaje, copia su texto (o el enlace del adjunto) al portapapeles.
    - **✉ Correo**: envía la transcripción completa por correo, a uno o varios destinatarios separados por comas (por defecto, el correo del cliente; cada uno recibe su propio correo). La introducción del correo se puede reescribir; admite {nombre}, {empresa}, {fecha} y {agente}.
    - **✓ Resuelta / ↺ Reabrir**: marca la conversación como resuelta. Se pone en verde con ✓ en la lista, deja de sonar, no se envían recordatorios y el tiempo de respuesta deja de contar desde ese momento. Si el cliente vuelve a escribir, se reabre sola.
+   - **Papelera** en cada chat de la lista (recepción y administración): borra la conversación sin abrirla, tras pedir confirmación.
    - **🗑 Borrar** (recepción y administración): borra definitivamente la conversación, con sus mensajes y adjuntos, para todo el equipo, tras pedir confirmación. Si el visitante web vuelve a escribir, empieza un chat nuevo.
    - **📝 Plantillas** (solo recepción): menú con respuestas preparadas que se insertan en el cuadro de texto. Desde «Gestionar plantillas…» se crean, editan y borran; se comparten entre todas las recepcionistas. Variables: `{nombre}` (cliente) y `{agente}` (tu nombre).
 4. **Aviso de llamada muy visible** cuando entra un chat:
@@ -24,7 +25,8 @@ Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalaci�
    - ventana roja y naranja **parpadeando, siempre encima**, con el botón **📞 ATENDER**;
    - botón de la barra de tareas e icono de la bandeja parpadeando.
    - «Posponer 2 minutos» silencia el aviso temporalmente; un chat nuevo lo vuelve a activar.
-5. Cerrar la ventana **no** cierra el programa: sigue en la bandeja del sistema (junto al reloj) para no perder avisos. Para salir: clic derecho en el icono → *Salir*. Desde ese menú también se silencia el sonido.
+5. **⏻ Desconectarme / ▶ Conectarme** (barra inferior o menú de la bandeja): desconectado no recibes chats nuevos, avisos ni transferencias, y tus compañeros te ven desconectado. Si recepción se desconecta, los chats nuevos pasan a los comerciales conectados. Al salir del programa o cerrar sesión también apareces desconectado al momento.
+6. Cerrar la ventana **no** cierra el programa: sigue en la bandeja del sistema (junto al reloj) para no perder avisos. Para salir: clic derecho en el icono → *Salir*. Desde ese menú también se silencia el sonido.
 
 Los mensajes en otros idiomas aparecen **traducidos al español** con el original debajo, y tus respuestas se envían traducidas al idioma del cliente.
 

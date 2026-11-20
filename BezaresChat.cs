@@ -114,6 +114,89 @@ namespace BezaresChat
         }
     }
 
+    /* =============================================================== lista de chats con papelera */
+
+    /// <summary>
+    /// Lista de conversaciones con una pequeña papelera en cada fila. El clic en la papelera se intercepta
+    /// antes de que la lista cambie de selección, así se puede borrar un chat sin abrirlo.
+    /// </summary>
+    class ConvListBox : ListBox
+    {
+        public Func<int, bool> CanTrash = i => false;
+        public event Action<int> TrashClicked;
+        public int HoverTrash = -1;
+
+        public ConvListBox() { DoubleBuffered = true; }
+
+        public Rectangle TrashRect(int index)
+        {
+            var b = GetItemRectangle(index);
+            return new Rectangle(b.Right - 30, b.Top + 33, 22, 22);
+        }
+
+        bool HitTrash(Point p, out int index)
+        {
+            index = IndexFromPoint(p);
+            return index >= 0 && index < Items.Count && CanTrash(index) && TrashRect(index).Contains(p);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_LBUTTONDOWN = 0x201, WM_LBUTTONDBLCLK = 0x203;
+            if (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_LBUTTONDBLCLK)
+            {
+                long lp = m.LParam.ToInt64();
+                var p = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+                int i;
+                if (HitTrash(p, out i))
+                {
+                    var h = TrashClicked;
+                    if (h != null) BeginInvoke(new Action(() => h(i)));
+                    return; // no seleccionar (no abrir) el chat
+                }
+            }
+            base.WndProc(ref m);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            int i;
+            int nh = HitTrash(e.Location, out i) ? i : -1;
+            if (nh != HoverTrash)
+            {
+                int old = HoverTrash;
+                HoverTrash = nh;
+                if (old >= 0 && old < Items.Count) Invalidate(GetItemRectangle(old));
+                if (nh >= 0) Invalidate(GetItemRectangle(nh));
+                Cursor = nh >= 0 ? Cursors.Hand : Cursors.Default;
+            }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            if (HoverTrash >= 0 && HoverTrash < Items.Count) Invalidate(GetItemRectangle(HoverTrash));
+            HoverTrash = -1;
+            Cursor = Cursors.Default;
+            base.OnMouseLeave(e);
+        }
+
+        /** Dibuja una papelera pequeña (gris; roja al pasar el ratón). */
+        public static void DrawTrash(Graphics g, Rectangle r, bool hover)
+        {
+            if (hover) using (var bg = new SolidBrush(Color.FromArgb(253, 236, 236))) g.FillEllipse(bg, r);
+            float x = r.Left + 4, y = r.Top + 3;
+            using (var pen = new Pen(hover ? Color.FromArgb(198, 40, 40) : Color.FromArgb(150, 156, 168), 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                g.DrawLine(pen, x + 1, y + 3.5f, x + 13, y + 3.5f);              // tapa
+                g.DrawLine(pen, x + 5, y + 1.5f, x + 9, y + 1.5f);               // asa
+                g.DrawPolygon(pen, new[] { new PointF(x + 2.5f, y + 5.5f), new PointF(x + 11.5f, y + 5.5f), new PointF(x + 10.5f, y + 15), new PointF(x + 3.5f, y + 15) }); // cubo
+                g.DrawLine(pen, x + 5.8f, y + 8, x + 6.1f, y + 12.5f);           // ranuras
+                g.DrawLine(pen, x + 8.2f, y + 8, x + 7.9f, y + 12.5f);
+            }
+        }
+    }
+
     /* =============================================================== banderas de país */
 
     /// <summary>
@@ -892,7 +975,7 @@ namespace BezaresChat
         ToolStripMenuItem startupItem = new ToolStripMenuItem("Iniciar con Windows");
 
         // controles
-        ListBox list = new ListBox { Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 58, BorderStyle = BorderStyle.None, IntegralHeight = false };
+        ConvListBox list = new ConvListBox { Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 58, BorderStyle = BorderStyle.None, IntegralHeight = false };
         Label lTitle = new Label { Font = U.Title, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
         PictureBox picFlag = new PictureBox { Dock = DockStyle.Left, Width = 0, SizeMode = PictureBoxSizeMode.CenterImage, Margin = new Padding(0) };
         ToolTip tips = new ToolTip();
@@ -911,11 +994,15 @@ namespace BezaresChat
         List<J> templates = new List<J>();
         Panel chatPanel = new Panel { Dock = DockStyle.Fill, Visible = false };
         Label empty = new Label { Text = "Selecciona un chat de la lista", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gray };
-        Label status = new Label { Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.DimGray, Padding = new Padding(8, 4, 0, 0) };
+        Label status = new Label { Dock = DockStyle.Fill, ForeColor = Color.DimGray, Padding = new Padding(8, 6, 0, 0) };
+        Panel statusBar = new Panel { Dock = DockStyle.Bottom, Height = 30 };
+        Button bOnline = new Button { Text = "⏻ Desconectarme", Dock = DockStyle.Right, Width = 160, FlatStyle = FlatStyle.Flat };
+        ToolStripMenuItem onlineItem = new ToolStripMenuItem("Desconectarme");
+        bool offline; // desconectado: no recibe chats nuevos, avisos ni transferencias
         HashSet<long> rendered = new HashSet<long>();
 
         NotifyIcon tray = new NotifyIcon();
-        Icon icoNormal = U.MakeIcon(false), icoAlert = U.MakeIcon(true);
+        Icon icoNormal = U.MakeIcon(false), icoAlert = U.MakeIcon(true), icoOffline = Icon.FromHandle(BrandIcon.Render(32, Color.FromArgb(150, 156, 168)).GetHicon()); // gris = desconectado
         RingForm ringForm = new RingForm();
         System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 2000 };
         System.Windows.Forms.Timer trayBlink = new System.Windows.Forms.Timer { Interval = 500 };
@@ -936,13 +1023,16 @@ namespace BezaresChat
             var listHead = new Label { Text = "  Chats", Font = U.Bold, Dock = DockStyle.Top, Height = 36, TextAlign = ContentAlignment.MiddleLeft, BackColor = U.Brand, ForeColor = Color.White };
             left.Controls.Add(list); left.Controls.Add(listHead);
             list.DrawItem += DrawConv;
+            // Papelera en cada fila (recepción y administración): borra sin abrir la conversación.
+            list.CanTrash = i => me != null && U.S(me, "role") != "sales";
+            list.TrashClicked += i => { if (i >= 0 && i < list.Items.Count) DeleteChat(((ConvItem)list.Items[i]).Id); };
             list.SelectedIndexChanged += (s, e) => { var c = list.SelectedItem as ConvItem; if (c != null && c.Id != activeId) OpenChat(c.Id); };
 
             // Cabecera del chat
             var head = new Panel { Dock = DockStyle.Top, Height = 58, Padding = new Padding(12, 6, 12, 6), BackColor = Color.White };
             head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bDelete); head.Controls.Add(bEmail); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
             tips.SetToolTip(bDelete, "Borrar definitivamente esta conversación");
-            bDelete.Click += (s, e) => DeleteChat();
+            bDelete.Click += (s, e) => DeleteChat(activeId);
             head.Controls.Add(bResolve);
             tips.SetToolTip(bResolve, "Marcar la conversación como resuelta (deja de contar el tiempo de respuesta)");
             bResolve.Click += (s, e) => ToggleResolved();
@@ -977,7 +1067,10 @@ namespace BezaresChat
                 };
             }
 
-            Controls.Add(chatPanel); Controls.Add(empty); Controls.Add(left); Controls.Add(status);
+            statusBar.Controls.Add(status); statusBar.Controls.Add(bOnline);
+            tips.SetToolTip(bOnline, "Desconectado no recibes chats nuevos, avisos ni transferencias (los compañeros te ven desconectado)");
+            bOnline.Click += (s, e) => ToggleOnline();
+            Controls.Add(chatPanel); Controls.Add(empty); Controls.Add(left); Controls.Add(statusBar);
 
             // Bandeja del sistema
             tray.Icon = icoNormal;
@@ -993,6 +1086,8 @@ namespace BezaresChat
             startupItem.Checked = Config.StartupEnabled;
             startupItem.Click += (s, e) => { Config.SetStartup(!startupItem.Checked); startupItem.Checked = Config.StartupEnabled; };
             menu.Items.Add(startupItem);
+            onlineItem.Click += (s, e) => ToggleOnline();
+            menu.Items.Add(onlineItem);
             menu.Items.Add("Cerrar sesión", null, (s, e) => Logout());
             menu.Items.Add("-");
             menu.Items.Add("Salir", null, (s, e) => { quitting = true; Close(); });
@@ -1018,6 +1113,9 @@ namespace BezaresChat
             }
             Sounds.StopRing();
             tray.Visible = false;
+            // Al salir del programa se aparece desconectado al instante (máx. 2 s de espera).
+            if (me != null && !offline && !string.IsNullOrEmpty(api.Token))
+                try { Task.Run(() => api.Post("/me/offline", null)).Wait(2000); } catch { }
             base.OnFormClosing(e);
         }
 
@@ -1088,6 +1186,7 @@ namespace BezaresChat
             me = agent;
             convs.Clear(); msgs.Clear(); unread.Clear(); ringing.Clear(); seenIn.Clear();
             since = 0; firstSync = true; activeId = 0; syncCount = 0;
+            offline = false; ApplyOnlineUi();
             Text = "Bezares Chat — " + U.S(me, "name");
             bTransfer.Visible = U.S(me, "role") != "sales"; // solo recepción/admin transfiere
             bTemplates.Visible = U.S(me, "role") == "receptionist"; // plantillas: solo recepción
@@ -1118,11 +1217,49 @@ namespace BezaresChat
             ShowLogin(null);
         }
 
+        /* ------------------------------------------------ conectado / desconectado */
+
+        async void ToggleOnline()
+        {
+            if (me == null) return;
+            if (!offline)
+            {
+                // Desconectarse: deja de sincronizar (no suena, no recibe chats nuevos) y el servidor lo marca al instante.
+                offline = true;
+                timer.Stop();
+                ringing.Clear();
+                UpdateRinging();
+                ApplyOnlineUi();
+                try { await Task.Run(() => api.Post("/me/offline", null)); } catch { }
+            }
+            else
+            {
+                offline = false;
+                ApplyOnlineUi();
+                timer.Start();
+                await Sync();
+            }
+        }
+
+        void ApplyOnlineUi()
+        {
+            bOnline.Text = offline ? "▶ Conectarme" : "⏻ Desconectarme";
+            bOnline.ForeColor = offline ? Color.FromArgb(26, 127, 55) : Color.Black;
+            onlineItem.Text = offline ? "Conectarme" : "Desconectarme";
+            tray.Icon = offline ? icoOffline : icoNormal;
+            tray.Text = offline ? "Bezares Chat — desconectado" : "Bezares Chat";
+            if (offline)
+            {
+                status.Text = "  ⚫ Desconectado: no recibes chats nuevos, avisos ni transferencias";
+                status.ForeColor = Color.DimGray;
+            }
+        }
+
         /* ------------------------------------------------ sincronización */
 
         async Task Sync()
         {
-            if (syncing || me == null) return;
+            if (syncing || me == null || offline) return;
             syncing = true;
             try
             {
@@ -1219,8 +1356,8 @@ namespace BezaresChat
                 Sounds.StopRing();
                 if (ringForm.Visible) ringForm.Hide();
                 trayBlink.Stop();
-                tray.Icon = icoNormal;
-                tray.Text = "Bezares Chat";
+                tray.Icon = offline ? icoOffline : icoNormal;
+                tray.Text = offline ? "Bezares Chat — desconectado" : "Bezares Chat";
                 if (ringing.Count == 0) Native.Flash(this, false);
             }
         }
@@ -1315,12 +1452,14 @@ namespace BezaresChat
             TextRenderer.DrawText(g, U.S(c, "last_preview"), U.Small, new Rectangle(x, e.Bounds.Top + 26, w, 16), Color.DimGray, TextFormatFlags.EndEllipsis);
             long asg = U.L(c, "assigned_to");
             TextRenderer.DrawText(g, U.Channel(ch) + " · " + (asg != 0 ? AgentName(asg) : "Sin asignar") + (resolved ? " · ✓ resuelta" : closed ? " · cerrado" : ""), U.Small, new Rectangle(x, e.Bounds.Top + 40, w, 16), resolved ? Color.FromArgb(26, 130, 60) : Color.Gray, TextFormatFlags.EndEllipsis);
+            bool trash = list.CanTrash(e.Index);
             int n; if (unread.TryGetValue(id, out n) && n > 0)
             {
-                var r = new Rectangle(e.Bounds.Right - 34, e.Bounds.Top + 30, 24, 18);
+                var r = new Rectangle(e.Bounds.Right - (trash ? 60 : 34), e.Bounds.Top + 35, 24, 18);
                 g.FillEllipse(new SolidBrush(Color.FromArgb(220, 30, 40)), r);
                 TextRenderer.DrawText(g, n > 9 ? "9+" : n.ToString(), U.Small, r, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
+            if (trash) ConvListBox.DrawTrash(g, list.TrashRect(e.Index), list.HoverTrash == e.Index); // papelera: borrar sin abrir
         }
 
         /* ------------------------------------------------ chat */
@@ -1666,9 +1805,8 @@ namespace BezaresChat
 
         /* ------------------------------------------------ borrar conversación */
 
-        async void DeleteChat()
+        async void DeleteChat(long id)
         {
-            long id = activeId;
             J c; if (id == 0 || !convs.TryGetValue(id, out c)) return;
             var answer = MessageBox.Show(this,
                 "¿Borrar definitivamente la conversación con " + ConvName(c) + "?\n\n" +
@@ -1682,7 +1820,7 @@ namespace BezaresChat
                 await Task.Run(() => api.Delete("/conversations/" + id));
                 convs.Remove(id); msgs.Remove(id); unread.Remove(id); ringing.Remove(id);
                 UpdateRinging();
-                CloseChat();
+                if (activeId == id) CloseChat();
                 RenderList();
                 tray.ShowBalloonTip(2500, "Conversación borrada", ConvName(c), ToolTipIcon.Info);
             }
