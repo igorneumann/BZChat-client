@@ -690,7 +690,9 @@ namespace BezaresChat
 
     class EmailForm : Form
     {
-        public TextBox To = new TextBox { Width = 340 };
+        public const string DefaultIntro = "Hola {nombre},\r\n\r\nTe enviamos la transcripción de tu conversación con {empresa} del {fecha}.\r\nLos enlaces a archivos adjuntos caducan en 7 días.";
+        public TextBox To = new TextBox { Width = 460 };
+        public TextBox Intro = new TextBox { Width = 460, Height = 120, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
 
         public EmailForm(string defaultTo, string customer)
         {
@@ -699,17 +701,27 @@ namespace BezaresChat
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(380, 200);
+            ClientSize = new Size(500, 410);
             var p = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(18), WrapContents = false };
-            p.Controls.Add(new Label { Text = "Se enviará la transcripción completa de la conversación" + (customer != "" ? " con " + customer : "") + ",\ncon enlaces a los adjuntos (válidos 7 días).", AutoSize = true, MaximumSize = new Size(340, 0), ForeColor = Color.DimGray });
-            p.Controls.Add(new Label { Text = "Enviar a:", AutoSize = true, Margin = new Padding(0, 12, 0, 2) });
+            p.Controls.Add(new Label { Text = "Se enviará la transcripción completa de la conversación" + (customer != "" ? " con " + customer : "") + ", con enlaces a los adjuntos (válidos 7 días).", AutoSize = true, MaximumSize = new Size(460, 0), ForeColor = Color.DimGray });
+            p.Controls.Add(new Label { Text = "Enviar a (varios correos separados por comas):", AutoSize = true, Margin = new Padding(0, 12, 0, 2) });
             To.Text = defaultTo;
             p.Controls.Add(To);
+            p.Controls.Add(new Label { Text = "Introducción del correo:", AutoSize = true, Margin = new Padding(0, 12, 0, 2) });
+            Intro.Text = DefaultIntro;
+            p.Controls.Add(Intro);
+            p.Controls.Add(new Label { Text = "Variables: {nombre} (cliente), {empresa}, {fecha} (inicio del chat), {agente} (tú). Cada destinatario recibe su propio correo.", AutoSize = true, MaximumSize = new Size(460, 0), ForeColor = Color.Gray, Font = U.Small });
             var ok = new Button { Text = "✉ Enviar", DialogResult = DialogResult.OK, Width = 120, Height = 32, Margin = new Padding(0, 12, 0, 0) };
             p.Controls.Add(ok);
-            AcceptButton = ok;
             Controls.Add(p);
             Shown += (s, e) => { To.Focus(); To.SelectAll(); };
+        }
+
+        /** Lista de correos escritos (separados por comas, punto y coma o espacios). */
+        public List<string> Recipients()
+        {
+            return To.Text.Split(new[] { ',', ';', ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim()).Where(x => x != "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
     }
 
@@ -820,7 +832,10 @@ namespace BezaresChat
         public ComboBox Agents = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 340 };
         public TextBox Note = new TextBox { Multiline = true, Width = 340, Height = 70 };
 
-        public TransferForm(List<J> agents, long exclude)
+        public TransferForm(List<J> agents, long exclude) : this(agents, exclude, 0) { }
+
+        /// <summary>Solo muestra a los compañeros conectados en este momento (programa abierto en el último minuto).</summary>
+        public TransferForm(List<J> agents, long exclude, long myId)
         {
             Text = "Transferir conversación";
             Font = U.Base;
@@ -832,15 +847,21 @@ namespace BezaresChat
             p.Controls.Add(new Label { Text = "Transferir a:", AutoSize = true });
             foreach (var a in agents)
             {
-                if (U.L(a, "active") == 0 || U.L(a, "id") == exclude) continue;
+                long aid = U.L(a, "id");
+                if (U.L(a, "active") == 0 || aid == exclude || aid == myId || !U.B(a, "online")) continue;
                 string role = U.S(a, "role") == "sales" ? "Comercial" : U.S(a, "role") == "receptionist" ? "Recepción" : "Admin";
-                Agents.Items.Add(new AgentItem { Id = U.L(a, "id"), Text = U.S(a, "name") + " (" + role + ")" + (U.B(a, "online") ? "  ● conectado" : "") });
+                Agents.Items.Add(new AgentItem { Id = aid, Text = "● " + U.S(a, "name") + " (" + role + ")" });
             }
             if (Agents.Items.Count > 0) Agents.SelectedIndex = 0;
             p.Controls.Add(Agents);
+            if (Agents.Items.Count == 0)
+            {
+                Agents.Enabled = false;
+                p.Controls.Add(new Label { Text = "No hay ningún compañero conectado ahora mismo.", AutoSize = true, ForeColor = Color.FromArgb(198, 40, 40), Margin = new Padding(0, 4, 0, 0) });
+            }
             p.Controls.Add(new Label { Text = "Nota para el compañero (opcional):", AutoSize = true, Margin = new Padding(0, 10, 0, 0) });
             p.Controls.Add(Note);
-            var ok = new Button { Text = "Transferir", DialogResult = DialogResult.OK, Width = 120, Height = 32 };
+            var ok = new Button { Text = "Transferir", DialogResult = DialogResult.OK, Width = 120, Height = 32, Enabled = Agents.Items.Count > 0 };
             p.Controls.Add(ok);
             AcceptButton = ok;
             Controls.Add(p);
@@ -885,6 +906,7 @@ namespace BezaresChat
         Button bTemplates = new Button { Text = "📝 Plantillas ▾", Dock = DockStyle.Left, Width = 150, FlatStyle = FlatStyle.Flat, Visible = false };
         Button bEmail = new Button { Text = "✉ Correo", Width = 100, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
         Button bDelete = new Button { Text = "🗑 Borrar", Width = 95, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(198, 40, 40), Visible = false };
+        Button bResolve = new Button { Text = "✓ Resuelta", Width = 110, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(26, 130, 60) };
         ContextMenuStrip templatesMenu = new ContextMenuStrip();
         List<J> templates = new List<J>();
         Panel chatPanel = new Panel { Dock = DockStyle.Fill, Visible = false };
@@ -921,6 +943,9 @@ namespace BezaresChat
             head.Controls.Add(lTitle); head.Controls.Add(picFlag); head.Controls.Add(bDelete); head.Controls.Add(bEmail); head.Controls.Add(bTransfer); head.Controls.Add(lSub);
             tips.SetToolTip(bDelete, "Borrar definitivamente esta conversación");
             bDelete.Click += (s, e) => DeleteChat();
+            head.Controls.Add(bResolve);
+            tips.SetToolTip(bResolve, "Marcar la conversación como resuelta (deja de contar el tiempo de respuesta)");
+            bResolve.Click += (s, e) => ToggleResolved();
             tips.SetToolTip(bEmail, "Enviar la conversación por correo electrónico");
             bEmail.Click += (s, e) => EmailChat();
             bTemplates.Click += async (s, e) => await ShowTemplatesMenu();
@@ -1244,7 +1269,7 @@ namespace BezaresChat
         {
             var ordered = convs.Values
                 .OrderByDescending(c => ringing.Contains(U.L(c, "id")) ? 1 : 0)
-                .ThenByDescending(c => U.S(c, "status") == "closed" ? 0 : 1)
+                .ThenByDescending(c => U.S(c, "status") == "open" ? 1 : 0) // resueltos y cerrados, al final
                 .ThenByDescending(c => U.L(c, "updated_at")).ToList();
             list.BeginUpdate();
             int top = list.TopIndex;
@@ -1268,17 +1293,28 @@ namespace BezaresChat
             g.FillRectangle(new SolidBrush(bg), e.Bounds);
             g.DrawLine(new Pen(Color.FromArgb(238, 240, 244)), e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
             var ch = U.S(c, "channel");
-            var dot = ch == "whatsapp" ? Color.FromArgb(37, 211, 102) : ch == "facebook" ? Color.FromArgb(24, 119, 242) : U.Brand;
+            string status = U.S(c, "status");
+            bool resolved = status == "resolved", closed = status == "closed";
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.FillEllipse(new SolidBrush(dot), e.Bounds.Left + 10, e.Bounds.Top + 12, 10, 10);
+            // Icono de estado: verde con ✓ = resuelta; naranja = nueva sin atender; azul = en curso; gris = cerrada.
+            if (resolved)
+            {
+                g.FillEllipse(new SolidBrush(Color.FromArgb(26, 160, 70)), e.Bounds.Left + 7, e.Bounds.Top + 9, 16, 16);
+                using (var pen = new Pen(Color.White, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawLines(pen, new[] { new PointF(e.Bounds.Left + 11, e.Bounds.Top + 17.5f), new PointF(e.Bounds.Left + 14, e.Bounds.Top + 20.5f), new PointF(e.Bounds.Left + 19.5f, e.Bounds.Top + 13.5f) });
+            }
+            else
+            {
+                var dot = closed ? Color.Silver : (U.L(c, "assigned_to") == 0 && U.L(c, "accepted_at") == 0 ? Color.FromArgb(245, 140, 20) : U.Brand);
+                g.FillEllipse(new SolidBrush(dot), e.Bounds.Left + 10, e.Bounds.Top + 12, 10, 10);
+            }
             int x = e.Bounds.Left + 28, w = e.Bounds.Width - 28 - 60;
-            bool closed = U.S(c, "status") == "closed";
             int fw = Flags.Draw(g, U.S(c, "country"), x, e.Bounds.Top + 9, 14); // bandera del país de origen
             TextRenderer.DrawText(g, (ring ? "📞 " : "") + ConvName(c), U.Bold, new Rectangle(x + fw, e.Bounds.Top + 6, w - fw, 20), closed ? Color.Gray : Color.Black, TextFormatFlags.EndEllipsis);
             TextRenderer.DrawText(g, U.Time(U.L(c, "updated_at")), U.Small, new Rectangle(e.Bounds.Right - 64, e.Bounds.Top + 8, 58, 16), Color.Gray, TextFormatFlags.Right);
             TextRenderer.DrawText(g, U.S(c, "last_preview"), U.Small, new Rectangle(x, e.Bounds.Top + 26, w, 16), Color.DimGray, TextFormatFlags.EndEllipsis);
             long asg = U.L(c, "assigned_to");
-            TextRenderer.DrawText(g, U.Channel(ch) + " · " + (asg != 0 ? AgentName(asg) : "Sin asignar") + (closed ? " · cerrado" : ""), U.Small, new Rectangle(x, e.Bounds.Top + 40, w, 16), Color.Gray, TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, U.Channel(ch) + " · " + (asg != 0 ? AgentName(asg) : "Sin asignar") + (resolved ? " · ✓ resuelta" : closed ? " · cerrado" : ""), U.Small, new Rectangle(x, e.Bounds.Top + 40, w, 16), resolved ? Color.FromArgb(26, 130, 60) : Color.Gray, TextFormatFlags.EndEllipsis);
             int n; if (unread.TryGetValue(id, out n) && n > 0)
             {
                 var r = new Rectangle(e.Bounds.Right - 34, e.Bounds.Top + 30, 24, 18);
@@ -1346,6 +1382,10 @@ namespace BezaresChat
             else if (lang != "" && lang != "es" && lang != "en") warn = "🌐 El cliente escribe en " + U.LangName(lang) + ": tus respuestas se traducirán automáticamente.";
             lWarn.Text = warn;
             lWarn.Height = warn == "" ? 0 : 28;
+            bool isResolved = U.S(c, "status") == "resolved";
+            bResolve.Text = isResolved ? "↺ Reabrir" : "✓ Resuelta";
+            bResolve.ForeColor = isResolved ? Color.DimGray : Color.FromArgb(26, 130, 60);
+            tips.SetToolTip(bResolve, isResolved ? "Volver a abrir la conversación" : "Marcar la conversación como resuelta (deja de contar el tiempo de respuesta)");
         }
 
         void ClearRows()
@@ -1602,6 +1642,28 @@ namespace BezaresChat
             }
         }
 
+        /* ------------------------------------------------ resolver */
+
+        async void ToggleResolved()
+        {
+            long id = activeId;
+            J c; if (id == 0 || !convs.TryGetValue(id, out c)) return;
+            bool resolve = U.S(c, "status") != "resolved";
+            bResolve.Enabled = false;
+            try
+            {
+                var r = await Task.Run(() => api.Post("/conversations/" + id + "/resolve", new J { { "resolved", resolve } }));
+                convs[id] = r["conversation"] as J;
+                ringing.Remove(id);
+                UpdateRinging();
+                RenderList();
+                if (activeId == id) RenderHead();
+                var _ = Sync(); // trae la nota "marcó la conversación como resuelta"
+            }
+            catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat"); }
+            finally { bResolve.Enabled = true; }
+        }
+
         /* ------------------------------------------------ borrar conversación */
 
         async void DeleteChat()
@@ -1637,13 +1699,23 @@ namespace BezaresChat
             using (var f = new EmailForm(U.S(c, "email"), ConvName(c)))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
-                string to = f.To.Text.Trim();
-                if (to == "" || !to.Contains("@")) { MessageBox.Show(this, "Escribe un correo electrónico válido.", "Bezares Chat"); return; }
+                var list = f.Recipients();
+                var bad = list.Where(x => !System.Text.RegularExpressions.Regex.IsMatch(x, @"^[^@\s]+@[^@\s]+\.[^@\s]+$")).ToList();
+                if (list.Count == 0) { MessageBox.Show(this, "Escribe al menos un correo electrónico.", "Bezares Chat"); return; }
+                if (bad.Count > 0) { MessageBox.Show(this, "Revisa estos correos:\n" + string.Join("\n", bad), "Bezares Chat"); return; }
+                if (list.Count > 10) { MessageBox.Show(this, "Como máximo 10 destinatarios por envío.", "Bezares Chat"); return; }
+                string to = string.Join(",", list);
+                // Si no se cambió la introducción, el servidor usa la suya (mismo texto).
+                string intro = f.Intro.Text.Trim() == EmailForm.DefaultIntro.Trim() ? "" : f.Intro.Text.Trim();
                 bEmail.Enabled = false; bEmail.Text = "Enviando…";
                 try
                 {
-                    await Task.Run(() => api.Post("/conversations/" + id + "/email", new J { { "to", to } }));
-                    tray.ShowBalloonTip(3000, "Correo enviado", "Conversación enviada a " + to, ToolTipIcon.Info);
+                    var r = await Task.Run(() => api.Post("/conversations/" + id + "/email", new J { { "to", to }, { "intro", intro } }));
+                    object fo; var failedList = r.TryGetValue("failed", out fo) && fo is object[] ? ((object[])fo).Select(Convert.ToString).ToList() : new List<string>();
+                    if (failedList.Count > 0)
+                        MessageBox.Show(this, "Enviado, pero no se pudo entregar a:\n" + string.Join("\n", failedList), "Bezares Chat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else
+                        tray.ShowBalloonTip(3000, "Correo enviado", "Conversación enviada a " + string.Join(", ", list), ToolTipIcon.Info);
                 }
                 catch (ApiException ex) { MessageBox.Show(this, ex.Message, "Bezares Chat", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                 finally { bEmail.Enabled = true; bEmail.Text = "✉ Correo"; }
@@ -1654,7 +1726,7 @@ namespace BezaresChat
         {
             long id = activeId;
             J c; if (id == 0 || !convs.TryGetValue(id, out c)) return;
-            using (var tf = new TransferForm(agents, U.L(c, "assigned_to")))
+            using (var tf = new TransferForm(agents, U.L(c, "assigned_to"), U.L(me, "id")))
             {
                 if (tf.ShowDialog(this) != DialogResult.OK || tf.Agents.SelectedItem == null) return;
                 var to = (TransferForm.AgentItem)tf.Agents.SelectedItem;

@@ -13,9 +13,10 @@ Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalaci�
 3. Funciones:
    - **Contestar chats**: escribe y pulsa *Intro* (Mayús+Intro para una línea nueva).
    - **📎 Adjuntar archivo**: imágenes, audio, vídeo y documentos (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV). También se pueden **arrastrar** sobre la conversación. El tamaño máximo lo fija el administrador (16 MB por defecto).
-   - **↪ Transferir**: solo para recepción. Pasa el chat a un comercial con una nota opcional.
+   - **↪ Transferir** (recepción y administración): pasa el chat a un compañero **conectado en ese momento**, con una nota opcional.
    - **📋 Copiar**: debajo de cada mensaje, copia su texto (o el enlace del adjunto) al portapapeles.
-   - **✉ Correo**: envía la transcripción completa de la conversación por correo electrónico. Por defecto, al correo del cliente; se puede cambiar antes de enviar.
+   - **✉ Correo**: envía la transcripción completa por correo, a uno o varios destinatarios separados por comas (por defecto, el correo del cliente; cada uno recibe su propio correo). La introducción del correo se puede reescribir; admite {nombre}, {empresa}, {fecha} y {agente}.
+   - **✓ Resuelta / ↺ Reabrir**: marca la conversación como resuelta. Se pone en verde con ✓ en la lista, deja de sonar, no se envían recordatorios y el tiempo de respuesta deja de contar desde ese momento. Si el cliente vuelve a escribir, se reabre sola.
    - **🗑 Borrar** (recepción y administración): borra definitivamente la conversación, con sus mensajes y adjuntos, para todo el equipo, tras pedir confirmación. Si el visitante web vuelve a escribir, empieza un chat nuevo.
    - **📝 Plantillas** (solo recepción): menú con respuestas preparadas que se insertan en el cuadro de texto. Desde «Gestionar plantillas…» se crean, editan y borran; se comparten entre todas las recepcionistas. Variables: `{nombre}` (cliente) y `{agente}` (tu nombre).
 4. **Aviso de llamada muy visible** cuando entra un chat:
