@@ -51,7 +51,9 @@ namespace BezaresChat
                 Application.ThreadException += (s, e) => LogError(e.Exception);
                 AppDomain.CurrentDomain.UnhandledException += (s, e) => LogError(e.ExceptionObject as Exception);
                 TaskScheduler.UnobservedTaskException += (s, e) => { LogError(e.Exception); e.SetObserved(); };
-                Application.Run(new MainForm());
+                bool minimized = Environment.GetCommandLineArgs().Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+                Config.RefreshStartupPath();
+                Application.Run(new MainForm(minimized));
             }
         }
     }
@@ -121,7 +123,7 @@ namespace BezaresChat
     {
         static string FilePath { get { return Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "BezaresChat.ini"); } }
         public string Server = "https://chat.bezares.com", Email = "", Token = "";
-        public bool Muted;
+        public bool Muted, Remember = true;
 
         public static Config Load()
         {
@@ -135,6 +137,7 @@ namespace BezaresChat
                     if (k == "server") c.Server = v;
                     else if (k == "email") c.Email = v;
                     else if (k == "muted") c.Muted = v == "1";
+                    else if (k == "remember") c.Remember = v != "0";
                     else if (k == "token") c.Token = Unprotect(v);
                 }
             }
@@ -146,9 +149,44 @@ namespace BezaresChat
         {
             try
             {
-                File.WriteAllLines(FilePath, new[] { "server=" + Server, "email=" + Email, "muted=" + (Muted ? "1" : "0"), "token=" + Protect(Token) });
+                // Sin "Recordar sesión" el token solo vive en memoria: al cerrar el programa hay que volver a entrar.
+                File.WriteAllLines(FilePath, new[] { "server=" + Server, "email=" + Email, "muted=" + (Muted ? "1" : "0"), "remember=" + (Remember ? "1" : "0"), "token=" + (Remember ? Protect(Token) : "") });
             }
             catch (Exception e) { MessageBox.Show("No se pudo guardar la configuración junto al programa: " + e.Message); }
+        }
+
+        /* ---- Iniciar con Windows (solo para el usuario actual, sin permisos de administrador) ---- */
+        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        const string RunName = "BezaresChat";
+
+        static string RunCommand { get { return "\"" + Application.ExecutablePath + "\" --minimized"; } }
+
+        public static bool StartupEnabled
+        {
+            get
+            {
+                try { using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue(RunName) != null; }
+                catch { return false; }
+            }
+        }
+
+        public static void SetStartup(bool on)
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey))
+                {
+                    if (on) k.SetValue(RunName, RunCommand);
+                    else if (k.GetValue(RunName) != null) k.DeleteValue(RunName);
+                }
+            }
+            catch (Exception e) { MessageBox.Show("No se pudo cambiar el inicio automático: " + e.Message, "Bezares Chat"); }
+        }
+
+        /** Programa portable: si se ha movido el .exe, actualiza la ruta guardada. */
+        public static void RefreshStartupPath()
+        {
+            if (StartupEnabled) SetStartup(true);
         }
 
         // El token se cifra con DPAPI: solo el mismo usuario de Windows puede leerlo.
@@ -339,7 +377,11 @@ namespace BezaresChat
     {
         public TextBox TServer = new TextBox(), TEmail = new TextBox(), TPass = new TextBox { UseSystemPasswordChar = true };
         public Label LErr = new Label { ForeColor = Color.FromArgb(198, 40, 40), AutoSize = false, Height = 40 };
-        public Button BOk = new Button { Text = "Entrar", Height = 36, BackColor = U.Brand, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        public Button BOk = new Button { Text = "Entrar", Height = 38, BackColor = U.Brand, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        public CheckBox CShow = new CheckBox { Text = "Mostrar contraseña", AutoSize = true, ForeColor = Color.DimGray };
+        public CheckBox CRemember = new CheckBox { Text = "Recordar sesión", AutoSize = true };
+        public CheckBox CStartup = new CheckBox { Text = "Iniciar con Windows", AutoSize = true };
+        public LinkLabel LForgot = new LinkLabel { Text = "¿Has olvidado tu contraseña?", AutoSize = true, LinkColor = U.Brand };
 
         public LoginForm(Config cfg)
         {
@@ -348,7 +390,7 @@ namespace BezaresChat
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(380, 330);
+            ClientSize = new Size(380, 440);
             Icon = U.MakeIcon(false);
             var p = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(24, 16, 24, 16), WrapContents = false };
             p.Controls.Add(new Label { Text = "● Bezares Chat", Font = U.Title, ForeColor = U.Brand, AutoSize = true, Margin = new Padding(0, 0, 0, 12) });
@@ -358,11 +400,26 @@ namespace BezaresChat
                 x.Item2.Width = 330;
                 p.Controls.Add(x.Item2);
             }
+            CShow.Margin = new Padding(0, 4, 0, 6);
+            CShow.CheckedChanged += (s, e) => TPass.UseSystemPasswordChar = !CShow.Checked;
+            p.Controls.Add(CShow);
+            CRemember.Checked = cfg.Remember;
+            CStartup.Checked = Config.StartupEnabled;
+            p.Controls.Add(CRemember);
+            p.Controls.Add(CStartup);
             LErr.Width = 330;
             BOk.Width = 330;
             BOk.FlatAppearance.BorderSize = 0;
             p.Controls.Add(LErr);
             p.Controls.Add(BOk);
+            LForgot.Margin = new Padding(0, 10, 0, 0);
+            // Abre la página de recuperación del servidor indicado en el navegador.
+            LForgot.LinkClicked += (s, e) =>
+            {
+                try { U.OpenUrl(Api.Normalize(TServer.Text) + "/admin/forgot"); }
+                catch (ApiException ex) { LErr.Text = ex.Message; }
+            };
+            p.Controls.Add(LForgot);
             Controls.Add(p);
             AcceptButton = BOk;
             TServer.Text = cfg.Server;
@@ -467,6 +524,8 @@ namespace BezaresChat
         int syncCount;
         bool syncing, firstSync = true, quitting;
         DateTime snoozeUntil = DateTime.MinValue;
+        bool startHidden;
+        ToolStripMenuItem startupItem = new ToolStripMenuItem("Iniciar con Windows");
 
         // controles
         ListBox list = new ListBox { Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 58, BorderStyle = BorderStyle.None, IntegralHeight = false };
@@ -489,7 +548,7 @@ namespace BezaresChat
         System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 2000 };
         System.Windows.Forms.Timer trayBlink = new System.Windows.Forms.Timer { Interval = 500 };
 
-        public MainForm()
+        public MainForm(bool minimized)
         {
             Text = "Bezares Chat";
             Font = U.Base;
@@ -497,6 +556,8 @@ namespace BezaresChat
             Size = new Size(1000, 700);
             MinimumSize = new Size(760, 480);
             StartPosition = FormStartPosition.CenterScreen;
+            startHidden = minimized;
+            if (minimized) { WindowState = FormWindowState.Minimized; ShowInTaskbar = false; }
 
             // Lista de chats
             var left = new Panel { Dock = DockStyle.Left, Width = 300, BackColor = Color.White };
@@ -548,6 +609,9 @@ namespace BezaresChat
             var mute = new ToolStripMenuItem("Silenciar sonido") { CheckOnClick = true, Checked = cfg.Muted };
             mute.CheckedChanged += (s, e) => { cfg.Muted = mute.Checked; cfg.Save(); UpdateRinging(); };
             menu.Items.Add(mute);
+            startupItem.Checked = Config.StartupEnabled;
+            startupItem.Click += (s, e) => { Config.SetStartup(!startupItem.Checked); startupItem.Checked = Config.StartupEnabled; };
+            menu.Items.Add(startupItem);
             menu.Items.Add("Cerrar sesión", null, (s, e) => Logout());
             menu.Items.Add("-");
             menu.Items.Add("Salir", null, (s, e) => { quitting = true; Close(); });
@@ -606,6 +670,9 @@ namespace BezaresChat
         {
             timer.Stop();
             Hide();
+            startHidden = false;
+            ShowInTaskbar = true;
+            WindowState = FormWindowState.Normal;
             using (var lf = new LoginForm(cfg))
             {
                 if (error != null) lf.LErr.Text = error;
@@ -619,7 +686,10 @@ namespace BezaresChat
                         string email = lf.TEmail.Text.Trim(), pass = lf.TPass.Text;
                         var a = new Api { Base = server };
                         var r = await Task.Run(() => a.Post("/auth/login", new J { { "email", email }, { "password", pass } }));
-                        cfg.Server = server; cfg.Email = email; cfg.Token = U.S(r, "token"); cfg.Save();
+                        cfg.Server = server; cfg.Email = email; cfg.Token = U.S(r, "token");
+                        cfg.Remember = lf.CRemember.Checked;
+                        cfg.Save();
+                        if (lf.CStartup.Checked != Config.StartupEnabled) { Config.SetStartup(lf.CStartup.Checked); startupItem.Checked = lf.CStartup.Checked; }
                         api.Base = server; api.Token = cfg.Token;
                         me = r["agent"] as J;
                         lf.DialogResult = DialogResult.OK;
@@ -640,7 +710,16 @@ namespace BezaresChat
             Text = "Bezares Chat — " + U.S(me, "name");
             bTransfer.Visible = U.S(me, "role") != "sales"; // solo recepción/admin transfiere
             chatPanel.Visible = false; empty.Visible = true;
-            ShowMain();
+            if (startHidden)
+            {
+                // Arranque con Windows: se queda en la bandeja; el aviso de llamada aparecerá igualmente.
+                startHidden = false;
+                Hide();
+                ShowInTaskbar = true;
+                WindowState = FormWindowState.Normal;
+                tray.ShowBalloonTip(3000, "Bezares Chat", "Conectado como " + U.S(me, "name") + ". Recibirás los avisos de chat aquí.", ToolTipIcon.Info);
+            }
+            else ShowMain();
             timer.Start();
             var _ = Sync();
         }

@@ -1,11 +1,15 @@
 # Bezares Chat: cliente de Windows
 
-Programa **portable** (un único `BezaresChat.exe` de unos 70 KB, sin instalación) con el que la recepcionista y los comerciales contestan los chats de la web, WhatsApp y Facebook de [Bezares Chat](https://github.com/igorneumann/Bezares-chat).
+Programa **portable** (un único `BezaresChat.exe` de unos 72 KB, sin instalación) con el que la recepcionista y los comerciales contestan los chats de la web, WhatsApp y Facebook de [Bezares Chat](https://github.com/igorneumann/Bezares-chat).
 
 ## Uso
 
 1. Copia `release/BezaresChat.exe` donde quieras (escritorio, carpeta de red, USB…) y ábrelo.
 2. Introduce el servidor (`https://chat.bezares.com`), tu correo y tu contraseña. El administrador crea los usuarios en `https://chat.bezares.com/admin`.
+   - **Mostrar contraseña**: casilla para ver lo que escribes.
+   - **Recordar sesión**: si la desmarcas, no se guarda la sesión y tendrás que entrar cada vez que abras el programa.
+   - **Iniciar con Windows**: el programa se abre solo al encender el ordenador, minimizado en la bandeja, y avisa igualmente de los chats. También se activa o desactiva desde el menú del icono de la bandeja.
+   - **¿Has olvidado tu contraseña?**: abre la página para recibir un enlace de recuperación por correo.
 3. Funciones:
    - **Contestar chats**: escribe y pulsa *Intro* (Mayús+Intro para una línea nueva).
    - **📎 Adjuntar archivo**: imágenes, audio, vídeo y documentos (PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV). También se pueden **arrastrar** sobre la conversación. El tamaño máximo lo fija el administrador (16 MB por defecto).
@@ -21,7 +25,7 @@ Los mensajes en otros idiomas aparecen **traducidos al español** con el origina
 
 ## Datos que guarda
 
-Junto al `.exe` crea `BezaresChat.ini` con el servidor, el correo y el token de sesión **cifrado con DPAPI** (solo lo puede leer tu usuario de Windows). No guarda la contraseña. Si algo falla, escribe los detalles en `BezaresChat-errores.log`.
+Junto al `.exe` crea `BezaresChat.ini` con el servidor, el correo y el token de sesión **cifrado con DPAPI** (solo lo puede leer tu usuario de Windows). No guarda la contraseña. «Iniciar con Windows» añade una entrada en el registro del usuario actual (`HKCUSoftwareMicrosoftWindowsCurrentVersionRun`), sin necesitar permisos de administrador. Si mueves el `.exe`, la ruta se actualiza al abrirlo. Si algo falla, escribe los detalles en `BezaresChat-errores.log`.
 
 ## Requisitos
 
