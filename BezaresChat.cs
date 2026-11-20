@@ -1,4 +1,4 @@
-// Bezares Chat — cliente de Windows portable (un solo .exe, sin instalación).
+﻿// Bezares Chat — cliente de Windows portable (un solo .exe, sin instalación).
 // Requiere .NET Framework 4.x (incluido en Windows 10/11). Compilar con build.bat.
 using System;
 using System.Collections.Generic;
@@ -38,6 +38,10 @@ namespace BezaresChat
         [STAThread]
         static void Main()
         {
+            // Uso interno de build.bat: genera icon.ico a partir del anagrama y termina.
+            var cli = Environment.GetCommandLineArgs();
+            int ei = Array.FindIndex(cli, a => a.Equals("--export-ico", StringComparison.OrdinalIgnoreCase));
+            if (ei >= 0 && ei + 1 < cli.Length) { BrandIcon.ExportIco(cli[ei + 1], BrandIcon.Red); return; }
             bool created;
             using (var mutex = new Mutex(true, "BezaresChat_SingleInstance", out created))
             {
@@ -103,17 +107,131 @@ namespace BezaresChat
             return m.ContainsKey(l) ? m[l] : l;
         }
 
+        /** Icono del programa: rojo Bezares; en alerta (llamada entrante), ámbar para que destaque al parpadear. */
         public static Icon MakeIcon(bool alert)
         {
-            var bmp = new Bitmap(32, 32);
+            return Icon.FromHandle(BrandIcon.Render(32, alert ? BrandIcon.Alert : BrandIcon.Red).GetHicon());
+        }
+    }
+
+    /* =============================================================== icono de marca (anagrama BZ) */
+
+    /// <summary>
+    /// Dibuja el icono de Bezares Chat (burbuja con el anagrama BZ recortado, fondo transparente)
+    /// a partir de los mismos trazados que brand/bezares-chat-icon-*.svg. WinForms no lee SVG.
+    /// </summary>
+    static class BrandIcon
+    {
+        public static readonly Color Red = Color.FromArgb(0xF5, 0x33, 0x3F);
+        public static readonly Color Alert = Color.FromArgb(0xFF, 0xA8, 0x00);
+
+        static readonly string[] BzPaths = {
+            "M31.99,97.77 L47.8,70.23 L15.95,70.17 L0,97.74 Z",
+            "M170.13,97.87h16.96l-31.79,55.24h128.16l-16.13-27.56h-64.03l32.07-55.62l-65.11,0.12c0,0-4.21,10.27-7.68,13.86C165.93,87.51,170.13,97.87,170.13,97.87Z",
+            "M98.83,42.27h2.81h25.73c5.28,0,14.3,4.39,14.3,13.96c0,7.3-6.61,13.96-15.04,13.96H82.36L98.83,42.27z M127.56,153.69c9.54,0,41.62-9.62,41.62-41.86c0-11.46-4.45-22.18-10.56-27.96c7.68-10.2,10.81-19.72,10.81-28.28c0-24.94-25.58-42.32-40.78-42.32H90.72c0,0-4.12-0.03-5.3,0.36c-2.08,0.69-3.27,2.4-4.49,4.56L5.92,147.62c-1.58,2.71-0.99,6.08,2.83,6.08H127.56z M126.75,125.64H50.42l16.47-27.92h2.81h59.12c3.64,0,12.96,3.45,12.96,14.54C141.79,119.05,135.81,125.64,126.75,125.64z"
+        };
+
+        /** Intérprete mínimo de trazados SVG (M L H V C S Z, absolutos y relativos). */
+        static GraphicsPath Parse(string d)
+        {
+            var gp = new GraphicsPath(FillMode.Alternate); // par-impar: respeta los huecos de la B
+            var tokens = System.Text.RegularExpressions.Regex.Matches(d, @"[MmLlHhVvCcSsZz]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?");
+            int i = 0; char cmd = 'M';
+            float x = 0, y = 0, sx = 0, sy = 0, lcx = 0, lcy = 0; bool lastCubic = false;
+            Func<float> num = () => float.Parse(tokens[i++].Value, System.Globalization.CultureInfo.InvariantCulture);
+            while (i < tokens.Count)
+            {
+                string t = tokens[i].Value;
+                if (char.IsLetter(t[0])) { cmd = t[0]; i++; if (cmd == 'Z' || cmd == 'z') { gp.CloseFigure(); x = sx; y = sy; lastCubic = false; continue; } }
+                bool rel = char.IsLower(cmd);
+                switch (char.ToUpper(cmd))
+                {
+                    case 'M':
+                        { float nx = num(), ny = num(); if (rel) { nx += x; ny += y; } gp.StartFigure(); x = sx = nx; y = sy = ny; cmd = rel ? 'l' : 'L'; lastCubic = false; break; }
+                    case 'L':
+                        { float nx = num(), ny = num(); if (rel) { nx += x; ny += y; } gp.AddLine(x, y, nx, ny); x = nx; y = ny; lastCubic = false; break; }
+                    case 'H':
+                        { float nx = num(); if (rel) nx += x; gp.AddLine(x, y, nx, y); x = nx; lastCubic = false; break; }
+                    case 'V':
+                        { float ny = num(); if (rel) ny += y; gp.AddLine(x, y, x, ny); y = ny; lastCubic = false; break; }
+                    case 'C':
+                        {
+                            float x1 = num(), y1 = num(), x2 = num(), y2 = num(), nx = num(), ny = num();
+                            if (rel) { x1 += x; y1 += y; x2 += x; y2 += y; nx += x; ny += y; }
+                            gp.AddBezier(x, y, x1, y1, x2, y2, nx, ny); lcx = x2; lcy = y2; x = nx; y = ny; lastCubic = true; break;
+                        }
+                    case 'S':
+                        {
+                            float x2 = num(), y2 = num(), nx = num(), ny = num();
+                            if (rel) { x2 += x; y2 += y; nx += x; ny += y; }
+                            float x1 = lastCubic ? 2 * x - lcx : x, y1 = lastCubic ? 2 * y - lcy : y;
+                            gp.AddBezier(x, y, x1, y1, x2, y2, nx, ny); lcx = x2; lcy = y2; x = nx; y = ny; lastCubic = true; break;
+                        }
+                    default: i++; break;
+                }
+            }
+            return gp;
+        }
+
+        static GraphicsPath Bubble()
+        {
+            // Mismo contorno que el SVG (viewBox 256): rectángulo redondeado 16..240 x 36..204, radio 32, cola abajo a la izquierda.
+            var p = new GraphicsPath();
+            p.AddArc(16, 36, 64, 64, 180, 90);
+            p.AddLine(48, 36, 208, 36);
+            p.AddArc(176, 36, 64, 64, 270, 90);
+            p.AddLine(240, 68, 240, 172);
+            p.AddArc(176, 140, 64, 64, 0, 90);
+            p.AddLine(208, 204, 122, 204);
+            p.AddLine(122, 204, 76, 242);
+            p.AddLine(76, 242, 76, 204);
+            p.AddLine(76, 204, 48, 204);
+            p.AddArc(16, 140, 64, 64, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        public static Bitmap Render(int size, Color color)
+        {
+            var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.FillEllipse(new SolidBrush(alert ? Color.FromArgb(220, 30, 40) : Brand), 1, 1, 30, 30);
-                g.FillEllipse(Brushes.White, 7, 8, 18, 13);
-                g.FillPolygon(Brushes.White, new[] { new Point(10, 19), new Point(8, 26), new Point(15, 20) });
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.Clear(Color.Transparent);
+                float k = size / 256f;
+                g.ScaleTransform(k, k);
+                using (var b = new SolidBrush(color)) using (var bubble = Bubble()) g.FillPath(b, bubble);
+                // Recorte del anagrama BZ: se "pinta" transparente sobre la burbuja.
+                g.CompositingMode = CompositingMode.SourceCopy;
+                g.TranslateTransform(33f, 64.05f);
+                g.ScaleTransform(0.6703f, 0.6703f);
+                using (var clear = new SolidBrush(Color.Transparent))
+                    foreach (var d in BzPaths) using (var gp = Parse(d)) g.FillPath(clear, gp);
             }
-            return Icon.FromHandle(bmp.GetHicon());
+            return bmp;
+        }
+
+        /** Escribe un .ico con varios tamaños (PNG dentro del ICO, admitido desde Windows Vista). */
+        public static void ExportIco(string path, Color color)
+        {
+            int[] sizes = { 16, 20, 24, 32, 40, 48, 64, 256 };
+            var pngs = new List<byte[]>();
+            foreach (var s in sizes)
+                using (var bmp = Render(s, color)) using (var ms = new MemoryStream()) { bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png); pngs.Add(ms.ToArray()); }
+            using (var fs = File.Create(path)) using (var w = new BinaryWriter(fs))
+            {
+                w.Write((short)0); w.Write((short)1); w.Write((short)sizes.Length);
+                int offset = 6 + 16 * sizes.Length;
+                for (int n = 0; n < sizes.Length; n++)
+                {
+                    byte dim = (byte)(sizes[n] >= 256 ? 0 : sizes[n]);
+                    w.Write(dim); w.Write(dim); w.Write((byte)0); w.Write((byte)0);
+                    w.Write((short)1); w.Write((short)32); w.Write(pngs[n].Length); w.Write(offset);
+                    offset += pngs[n].Length;
+                }
+                foreach (var p in pngs) w.Write(p);
+            }
         }
     }
 
@@ -393,7 +511,10 @@ namespace BezaresChat
             ClientSize = new Size(380, 440);
             Icon = U.MakeIcon(false);
             var p = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(24, 16, 24, 16), WrapContents = false };
-            p.Controls.Add(new Label { Text = "● Bezares Chat", Font = U.Title, ForeColor = U.Brand, AutoSize = true, Margin = new Padding(0, 0, 0, 12) });
+            var brand = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 12) };
+            brand.Controls.Add(new PictureBox { Image = BrandIcon.Render(44, BrandIcon.Red), Size = new Size(44, 44), Margin = new Padding(0, 0, 10, 0) });
+            brand.Controls.Add(new Label { Text = "Bezares Chat", Font = U.Title, ForeColor = Color.FromArgb(27, 34, 48), AutoSize = true, Margin = new Padding(0, 10, 0, 0) });
+            p.Controls.Add(brand);
             foreach (var x in new[] { Tuple.Create("Servidor", TServer), Tuple.Create("Correo", TEmail), Tuple.Create("Contraseña", TPass) })
             {
                 p.Controls.Add(new Label { Text = x.Item1, AutoSize = true, ForeColor = Color.DimGray });
