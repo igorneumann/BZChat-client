@@ -1,0 +1,7 @@
+BezaresChat.ini
+*.log
+/BezaresChat.exe
+flags/
+release/flags/
+release/BezaresChat.ini
+release/*.log
