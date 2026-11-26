@@ -19,7 +19,7 @@ using System.Windows.Forms;
 
 [assembly: System.Reflection.AssemblyTitle("Bezares Chat")]
 [assembly: System.Reflection.AssemblyProduct("Bezares Chat")]
-[assembly: System.Reflection.AssemblyVersion("2026.11.25.3")]
+[assembly: System.Reflection.AssemblyVersion("2026.11.26.1")]
 
 namespace BezaresChat
 {
@@ -2553,7 +2553,7 @@ namespace BezaresChat
         /** Tiempo que lleva esperando el cliente (mensaje suyo sin respuesta), según el reloj del servidor; 0 si no espera. */
         long WaitMs(J c)
         {
-            // El aviso de las 23 h (solo WhatsApp) también para la espera.
+            // El aviso de las 23 h (WhatsApp y Facebook) también para la espera.
             long lc = U.L(c, "last_customer_at"), la = Math.Max(U.L(c, "last_agent_at"), U.L(c, "window_notice_at"));
             if (U.S(c, "status") != "open" || lc <= 0 || lc <= la) return 0;
             return Math.Max(1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + clockSkew - lc);
@@ -3520,8 +3520,7 @@ namespace BezaresChat
             LayoutHead();
             RenderPanel();
             string warn = "";
-            if (!U.B(c, "window_open") && U.S(c, "channel") == "facebook") warn = "⚠ Han pasado más de 24 h desde el último mensaje del cliente: Facebook no permite escribirle hasta que vuelva a escribir.";
-            else if (WindowClosed(c)) warn = "⚠ Han pasado más de 24 h desde el último mensaje del cliente: no se le puede escribir por este chat. Usa el envío por correo.";
+            if (WindowClosed(c)) warn = "⚠ Han pasado más de 24 h desde el último mensaje del cliente: no se le puede escribir por este chat. Usa el envío por correo.";
             else if (lang != "" && lang != "es" && lang != "en") warn = "El cliente escribe en " + U.LangName(lang) + ": tus respuestas se traducirán automáticamente.";
             lWarn.Text = warn;
             lWarn.Height = warn == "" ? 0 : U.P(28);
@@ -3898,17 +3897,17 @@ namespace BezaresChat
             if (late) AskEmail(id, text);
         }
 
-        /** WhatsApp: pasadas 24 h del último mensaje del cliente ya no se le puede escribir. */
+        /** WhatsApp y Facebook: pasadas 24 h del último mensaje del cliente ya no se le puede escribir. */
         bool WindowClosed(J c)
         {
-            if (c == null || U.S(c, "channel") != "whatsapp") return false;
+            if (c == null || (U.S(c, "channel") != "whatsapp" && U.S(c, "channel") != "facebook")) return false;
             return !U.B(c, "window_open") || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + clockSkew - U.L(c, "last_customer_at") >= 86400000;
         }
 
         /** Pide usar el correo en lugar del chat; lo escrito pasa a ser el texto del correo. */
         void AskEmail(long id, string text)
         {
-            string msg = "Han pasado más de 24 horas desde el último mensaje del cliente y WhatsApp no permite contestarle por el chat.\n\nUsa el envío por correo.";
+            string msg = "Han pasado más de 24 horas desde el último mensaje del cliente y " + U.Channel(U.S(ConvOf(id), "channel")) + " no permite contestarle por el chat.\n\nUsa el envío por correo.";
             if (!Can("email")) { MessageBox.Show(this, msg + "\nTu rol no puede enviar correos desde el programa: pídeselo a un compañero.", "Contesta por correo", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             if (id != activeId) { MessageBox.Show(this, msg, "Contesta por correo", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             msg += text != "" ? "\n¿Abrirlo ahora con lo que has escrito?" : "\n¿Abrirlo ahora?";
