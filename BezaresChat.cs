@@ -2253,6 +2253,12 @@ namespace BezaresChat
             tips.SetToolTip(bOnline, "Desconectado no recibes chats nuevos, avisos ni transferencias (los compañeros te ven desconectado)");
             bOnline.Click += (s, e) => ToggleOnline();
             Controls.Add(chatPanel); Controls.Add(empty); Controls.Add(left); Controls.Add(statusBar);
+            // Versión del programa (fichero VERSION; la pone build.bat / publicar.ps1 al compilar), abajo a la derecha.
+            var verAttr = (System.Reflection.AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
+                System.Reflection.Assembly.GetExecutingAssembly(), typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+            if (verAttr != null)
+                Controls.Add(new Label { Dock = DockStyle.Bottom, Height = U.P(18), Text = "v" + verAttr.InformationalVersion, TextAlign = ContentAlignment.MiddleRight,
+                    Font = U.Small, ForeColor = U.Muted, BackColor = Color.White, Padding = new Padding(0, 0, U.P(8), 0), UseMnemonic = false });
             ApplyPanelState();
 
             // Bandeja del sistema
