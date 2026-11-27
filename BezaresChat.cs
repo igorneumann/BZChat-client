@@ -19,7 +19,7 @@ using System.Windows.Forms;
 
 [assembly: System.Reflection.AssemblyTitle("Bezares Chat")]
 [assembly: System.Reflection.AssemblyProduct("Bezares Chat")]
-[assembly: System.Reflection.AssemblyVersion("2026.11.27.1")]
+[assembly: System.Reflection.AssemblyVersion("2026.11.27.2")]
 
 namespace BezaresChat
 {
@@ -2073,6 +2073,7 @@ namespace BezaresChat
         public bool JustUpdated;
         System.Windows.Forms.Timer updTimer = new System.Windows.Forms.Timer { Interval = 20000 };
         ToolStripMenuItem updItem = new ToolStripMenuItem("Buscar actualizaciones");
+        Label verLabel;
         Updater.Release updReady; // descargada y comprobada, a la espera de un buen momento
         DateTime updChecked = DateTime.MinValue;
         bool updBusy, updWarned;
@@ -2253,12 +2254,10 @@ namespace BezaresChat
             tips.SetToolTip(bOnline, "Desconectado no recibes chats nuevos, avisos ni transferencias (los compañeros te ven desconectado)");
             bOnline.Click += (s, e) => ToggleOnline();
             Controls.Add(chatPanel); Controls.Add(empty); Controls.Add(left); Controls.Add(statusBar);
-            // Versión del programa (fichero VERSION; la pone build.bat / publicar.ps1 al compilar), abajo a la derecha.
-            var verAttr = (System.Reflection.AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
-                System.Reflection.Assembly.GetExecutingAssembly(), typeof(System.Reflection.AssemblyInformationalVersionAttribute));
-            if (verAttr != null)
-                Controls.Add(new Label { Dock = DockStyle.Bottom, Height = U.P(18), Text = "v" + verAttr.InformationalVersion, TextAlign = ContentAlignment.MiddleRight,
-                    Font = U.Small, ForeColor = U.Muted, BackColor = Color.White, Padding = new Padding(0, 0, U.P(8), 0), UseMnemonic = false });
+            // Versión de Bezares Chat, abajo a la derecha: la que dice el servidor (app/VERSION), la misma que enseña el panel.
+            verLabel = new Label { Dock = DockStyle.Bottom, Height = U.P(18), Text = "", TextAlign = ContentAlignment.MiddleRight,
+                Font = U.Small, ForeColor = U.Muted, BackColor = Color.White, Padding = new Padding(0, 0, U.P(8), 0), UseMnemonic = false };
+            Controls.Add(verLabel);
             ApplyPanelState();
 
             // Bandeja del sistema
@@ -3190,6 +3189,8 @@ namespace BezaresChat
             since = U.L(d, "now");
             if (since > 0) clockSkew = since - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             if (U.L(d, "wait_minutes") > 0) waitMinutes = U.L(d, "wait_minutes");
+            string appVer = U.S(d, "version");
+            if (appVer != "" && verLabel != null && verLabel.Text != "v" + appVer) verLabel.Text = "v" + appVer;
             agents = U.A(d, "agents");
             typing = U.A(d, "typing");
             UpdateSignups(U.A(d, "signups"));

@@ -50,13 +50,8 @@ $code = $code.Replace($m.Value, 'AssemblyVersion("' + $ver + '")')
 New-Item -ItemType Directory -Force $out | Out-Null
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-# Version del programa que se muestra (fichero VERSION, sube 0.1 en cada commit)
-$verFile = Join-Path $PSScriptRoot 'VERSION'
-$appVer = if (Test-Path $verFile) { ([IO.File]::ReadAllText($verFile)).Trim() } else { '1.0' }
-$verCs = Join-Path $out 'version.cs'
-[IO.File]::WriteAllText($verCs, '[assembly: System.Reflection.AssemblyInformationalVersion("' + $appVer + '")]')
 Push-Location $PSScriptRoot
-try { & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$exe" /win32icon:icon.ico /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Web.Extensions.dll /r:System.Security.dll BezaresChat.cs $verCs } finally { Pop-Location }
+try { & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$exe" /win32icon:icon.ico /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Web.Extensions.dll /r:System.Security.dll BezaresChat.cs } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { throw 'Error al compilar' }
 # El antivirus puede tener ocupado el programa recien compilado durante unos segundos.
 for ($i = 0; $i -lt 40; $i++) { try { [void][IO.File]::ReadAllBytes($exe); break } catch { Start-Sleep -Seconds 3 } }
