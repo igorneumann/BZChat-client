@@ -19,7 +19,7 @@ using System.Windows.Forms;
 
 [assembly: System.Reflection.AssemblyTitle("Bezares Chat")]
 [assembly: System.Reflection.AssemblyProduct("Bezares Chat")]
-[assembly: System.Reflection.AssemblyVersion("2026.11.26.1")]
+[assembly: System.Reflection.AssemblyVersion("2026.11.27.1")]
 
 namespace BezaresChat
 {
